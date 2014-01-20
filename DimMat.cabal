@@ -2,7 +2,7 @@ name:                DimMat
 version:             0.1.0.0
 synopsis:            matrices with statically checked units
 -- description:         
-license:             MIT
+license:             BSD3
 license-file:        LICENSE
 author:              Doug McClean, Adam Vogt
 maintainer:          vogt.adam@gmail.com
