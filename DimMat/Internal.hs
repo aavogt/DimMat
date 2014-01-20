@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -131,6 +132,15 @@ type family At (a :: [k]) n :: k
 type instance At (a ': as) N.Z = a
 type instance At (a ': as) (N.S n) = At as n
 
+-- | put the DimMat into a canonical form, which has a DOne as the first
+-- elemen of the colUnits (2nd) list. Instances for kinds @*@ and @* -> *@
+type family Canon (a :: k) :: k
+type instance Canon (DimMat r c) = DimMat (MapMul (Head c) r) (MapDiv (Head c) c)
+type instance Canon (DimMat r c x) = DimMat (MapMul (Head c) r) (MapDiv (Head c) c) x
+
+type family Head (a :: [k]) :: k
+type instance Head (a ': as) = a
+
 (@@>) :: (N.NumType i, N.NumType j, Storable a) => DimMat ri rj a
     -> (i, j)
     -> Quantity ( (ri `At` i) `Mul` (rj `At` j) ) a
@@ -140,10 +150,19 @@ multiply :: H.Product a => DimMat ri ci a -> DimMat rj cj a
     -> DimMat (MapMul (Inner ci rj) ri) cj a
 multiply (DimMat a) (DimMat b) = DimMat (H.multiply a b)
 
-trans :: DimMat ri ci a -> DimMat ci ri a
+type TransCxt ri ci ri' ci' =
+         ( Canon (DimMat ci' ri') ~ DimMat ci' ri',
+           Canon (DimMat ci ri) ~ DimMat ri' ci')
+trans :: TransCxt ri ci ri' ci' => DimMat ri ci a -> DimMat ri' ci' a
 trans (DimMat a) = DimMat (H.trans a)
 
-inv :: H.Field a => DimMat ri ci a -> DimMat (MapRecip ci) (MapRecip ri) a
+type InvCxt ri ci ri' ci' =
+        ( MapRecip ci ~ ri',
+          MapRecip ri ~ ci',
+          MapRecip ri' ~ ci,
+          MapRecip ci' ~ ri)
+
+inv :: (H.Field a, InvCxt ri ci ri' ci') => DimMat ri ci a -> DimMat ri' ci' a
 inv (DimMat a) = DimMat (H.inv a)
 
 det :: H.Field a => DimMat ri ci a
