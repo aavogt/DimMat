@@ -4,7 +4,7 @@
 * automatic differentiation (`ad` package) that knows about units
 * matrices/vectors with units
 
-also included is a quasiquote (for expressions and patterns). See t1.hs
+also included is a quasiquote (for expressions and patterns). See `examples/qq.hs`
 
 ## related work
 ### matrix dimensions statically checked
