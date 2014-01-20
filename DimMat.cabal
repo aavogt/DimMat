@@ -1,0 +1,34 @@
+name:                DimMat
+version:             0.1.0.0
+synopsis:            matrices with statically checked units
+-- description:         
+license:             MIT
+license-file:        LICENSE
+author:              Doug McClean, Adam Vogt
+maintainer:          vogt.adam@gmail.com
+-- copyright:           
+category:            Math
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+tested-with:         GHC==7.6.2
+
+library
+  exposed-modules:     DimMat, DimMat.QQ, DimMat.Internal
+  build-depends:       base >=4.6 && <4.7,
+                       dimensional-tf >=0.2 && <0.3,
+                       hmatrix-syntax >=0.1 && <0.2,
+                       template-haskell >=2.8 && <2.9,
+                       numtype-tf >=0.1 && <0.2,
+                       ad >=3.4 && <3.5,
+                       hmatrix >=0.15 && <0.16
+  default-language:    Haskell2010
+  other-extensions:    TemplateHaskell,
+                       FlexibleContexts,
+                       TypeOperators,
+                       UndecidableInstances,
+                       DataKinds,
+                       PolyKinds,
+                       KindSignatures,
+                       TypeFamilies,
+                       RankNTypes
