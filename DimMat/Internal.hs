@@ -80,10 +80,10 @@ grad f x = DimMat (H.fromLists [AD.grad (f . DimVec . H.fromList) (H.toList x)])
 -- that we only have one type for a given matrix. Use a GADT for type-signature
 -- convenience: going back to a newtype and adding constraints on all the functions
 -- for DimMat might happen.
-data DimMat (rowUnits :: [*]) (colUnits :: [*]) a where
-     DimMat :: (H.Container H.Matrix a,
-                H.Field a) => H.Matrix a -> DimMat ri ci a
-newtype DimVec (units :: [*]) a = DimVec (H.Vector a)
+data DimMat (sh :: [[*]]) a where
+     DimMat :: (H.Container H.Matrix a, H.Field a) => H.Matrix a -> DimMat sh a
+     -- DimVec :: H.Vector a -> DimMat sh a?
+
 
 type family MapDiv (a :: *) (xs :: [*]) :: [*]
 type instance MapDiv a (x ': xs) = Div x a ': MapDiv a xs
@@ -118,9 +118,9 @@ index in the ijs.  The first element of colUnits is DOne.
 -}
 type family DimMatFromTuple ijs :: * -> *
 type instance DimMatFromTuple ijs =
-        DimMat (UnDQuantity (MapFst ijs))
-               (DOne ': MapDiv (UnDQuantity1 (Fst (Fst ijs)))
-               (UnDQuantity (FromPairs (Snd (Fst ijs)))))
+        DimMat [UnDQuantity (MapFst ijs),
+               DOne ': MapDiv (UnDQuantity1 (Fst (Fst ijs)))
+               (UnDQuantity (FromPairs (Snd (Fst ijs))))]
 
 -- | just for types
 toDM :: ijs -> DimMatFromTuple ijs t
@@ -160,23 +160,23 @@ type instance At (a ': as) (N.S n) = At as n
 -- | put the DimMat into a canonical form, which has a DOne as the first
 -- elemen of the colUnits (2nd) list. Instances for kinds @*@ and @* -> *@
 type family Canon (a :: k) :: k
-type instance Canon (DimMat r c) = DimMat (MapMul (Head c) r) (MapDiv (Head c) c)
-type instance Canon (DimMat r c x) = DimMat (MapMul (Head c) r) (MapDiv (Head c) c) x
+type instance Canon (DimMat [r,c]) = DimMat [MapMul (Head c) r, MapDiv (Head c) c]
+type instance Canon (DimMat [r,c] x) = DimMat [MapMul (Head c) r, MapDiv (Head c) c] x
 
 type family Head (a :: [k]) :: k
 type instance Head (a ': as) = a
 
-(@@>) :: (N.NumType i, N.NumType j) => DimMat ri rj a
+(@@>) :: (N.NumType i, N.NumType j) => DimMat [ri,ci] a
     -> (i, j)
     -> Quantity ( (ri `At` i) `Mul` (rj `At` j) ) a
 DimMat m @@> (i,j) = Dimensional (m H.@@> (N.toNum i,N.toNum j))
 
-multiply :: H.Product a => DimMat ri ci a -> DimMat rj cj a
-    -> DimMat (MapMul (Inner ci rj) ri) cj a
+multiply :: H.Product a => DimMat [ri,ci] a -> DimMat [rj,cj] a
+    -> DimMat [MapMul (Inner ci rj) ri, cj] a
 multiply (DimMat a) (DimMat b) = DimMat (H.multiply a b)
 
-trans :: one ~ DOne => DimMat (a11 ': ri) (one ': ci) a
-                    -> DimMat (a11 ': ci) (one ': ri) a
+trans :: one ~ DOne => DimMat [a11 ': ri, one ': ci] a
+                    -> DimMat [a11 ': ci, one ': ri] a
 trans (DimMat a) = DimMat (H.trans a)
 
 type family AreRecips (a :: [k]) (b :: [k]) :: Constraint
@@ -199,11 +199,19 @@ type instance SameLengths '[b] = ()
 type instance SameLengths '[] = ()
 
 
-inv :: (SameLengths [ri,ci,ri',ci'], AreRecips ri ci', AreRecips ci ri')
-    => DimMat ri ci a -> DimMat ri' ci' a
+type family InvCxt (sh :: [[*]]) (sh' :: [[*]]) :: Constraint
+       
+type instance InvCxt
+    [a11 ': ri, dOne ': ci]
+    [a11' ': ri', dOne' ': ci'] =
+        (SameLengths [ri,ci,ri',ci'], AreRecips ri ci', AreRecips ci ri',
+        dOne ~ DOne, dOne' ~ DOne, a11 ~ Div DOne a11', a11' ~ Div DOne a11)
+
+
+inv :: InvCxt sh sh' => DimMat sh a -> DimMat sh' a
 inv (DimMat a) = DimMat (H.inv a)
 
-det :: (SameLengths [ri,ci]) => DimMat ri ci a
+det :: (SameLengths [ri,ci]) => DimMat [ri,ci] a
         -> Dimensional v (Product ri `Mul` Product ci) a
 det (DimMat a) = Dimensional (H.det a)
 
@@ -223,19 +231,19 @@ the hmatrix 'H.expm'
 -}
 expm :: (ScaleCxt time ri ri')
     => Quantity time a
-    -> DimMat ri ci a
-    -> DimMat ri' ci a
+    -> DimMat [ri,ci] a
+    -> DimMat [ri',ci] a
 expm (Dimensional t) (DimMat a) = DimMat (H.expm (H.scale t a))
 
 scale :: (ScaleCxt e ri ri')
-    => Quantity e a -> DimMat ri ci a -> DimMat ri' ci a
+    => Quantity e a -> DimMat [ri,ci] a -> DimMat [ri',ci] a
 scale (Dimensional t) (DimMat a) = DimMat (H.scale t a)
 
 scaleRecip :: (ScaleCxt e' ri ri', Div DOne e ~ e', Div DOne e' ~ e)
-    => Quantity e a -> DimMat ri ci a -> DimMat ri' ci a
+    => Quantity e a -> DimMat [ri,ci] a -> DimMat [ri',ci] a
 scaleRecip (Dimensional t) (DimMat a) = DimMat (H.scale t a)
 
-liftH2 :: (m ~ DimMat ri ci a,
+liftH2 :: (m ~ DimMat [ri,ci] a,
           h ~ H.Matrix a) => (h -> h -> h) -> m -> m -> m
 liftH2 f (DimMat a) (DimMat b) = DimMat (f a b)
 
@@ -247,7 +255,7 @@ divide a b = liftH2 H.divide a b
 arctan2 a b = liftH2 H.arctan2 a b
 -}
 
-equal :: (m ~ DimMat ri ci a) => m -> m -> Bool
+equal :: (m ~ DimMat [ri,ci] a) => m -> m -> Bool
 equal (DimMat a) (DimMat b) = H.equal a b
 
 -- how to nicely defunctionalize? See Fun' Fun in HList?
@@ -258,7 +266,7 @@ cmap :: (ScaleCxt deltaE ri ri')
          N.NumType n, N.NumType j,
          e ~ Dim l m t i th n j) =>
            Quantity e a -> Quantity (Mul e deltaE) b)
-    -> DimMat ri ci a -> DimMat ri' ci b
+    -> DimMat [ri,ci] a -> DimMat [ri',ci] b
 cmap _ f m = error "cmap not implemented"
     {- H.mapMatrixWithIndex
      will be useful. 
@@ -269,10 +277,10 @@ rows (DimMat a) = H.rows a
 cols (DimMat a) = H.cols a
 
 -- use proxy?
-rowsNT :: DimMat ri ci a -> Len ri
+rowsNT :: DimMat [ri,ci] a -> Len ri
 rowsNT = error "rowsNT"
 
-colsNT :: DimMat ri ci a -> Len ci
+colsNT :: DimMat [ri,ci] a -> Len ci
 colsNT = error "colsNT"
 
 {- TODO:
