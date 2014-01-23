@@ -180,7 +180,8 @@ trans :: one ~ DOne => DimMat (a11 ': ri) (one ': ci) a
 trans (DimMat a) = DimMat (H.trans a)
 
 type family AreRecips (a :: [k]) (b :: [k]) :: Constraint
-type instance AreRecips (a ': as) (b ': bs) = (a ~ b, AreRecips as bs)
+type instance AreRecips (a ': as) (b ': bs) =
+        (a ~ Div DOne b, b ~ Div DOne a, AreRecips as bs)
 type instance AreRecips '[] '[] = ()
 
 type SameLength a b = (SameLength' a b, SameLength' b a)
