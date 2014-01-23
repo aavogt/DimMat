@@ -168,7 +168,7 @@ type instance Head (a ': as) = a
 
 (@@>) :: (N.NumType i, N.NumType j) => DimMat [ri,ci] a
     -> (i, j)
-    -> Quantity ( (ri `At` i) `Mul` (rj `At` j) ) a
+    -> Quantity ( (ri `At` i) `Mul` (ci `At` j) ) a
 DimMat m @@> (i,j) = Dimensional (m H.@@> (N.toNum i,N.toNum j))
 
 multiply :: H.Product a => DimMat [ri,ci] a -> DimMat [rj,cj] a
