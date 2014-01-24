@@ -402,8 +402,8 @@ scalar :: (H.Field a,
 scalar (Dimensional a) = DimMat (H.scalar a)
 
 konst :: forall sh u us ones a _1. (H.Field a,
-                              N.NumTypeI (Len ones),
-                              N.NumTypeI (Len us),
+                              N.NumType (Len ones),
+                              N.NumType (Len us),
                               ones ~ (DOne ': _1))
     => Quantity u a -> DimMat [us, ones] a
 konst (Dimensional a) = DimMat (H.konst a
