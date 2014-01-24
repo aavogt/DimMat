@@ -46,6 +46,11 @@ module DimMat.Internal (
    toDM,
    DimMatFromTuple,
    DimMat(..),
+   AtEq, MapMul, Inner, InvCxt, SameLengths, Product, MapRecip, ScaleCxt,
+   ZipWithZipWithMul, MapMapConst, Len, CanAddConst, PPUnits,
+   PPUnits', Head, MapDiv,
+   -- * TODO
+   -- $TODO
   ) where
 import GHC.Exts (Constraint)
 import qualified Numeric.AD as AD
@@ -86,10 +91,16 @@ grad f x = DimMat (H.fromLists [AD.grad (f . DimVec . H.fromList) (H.toList x)])
 -}
 
 
--- | convention is that `head colUnits` should be 'DOne'. That will ensure
--- that we only have one type for a given matrix. Use a GADT for type-signature
--- convenience: going back to a newtype and adding constraints on all the functions
--- for DimMat might happen.
+{- | Matrix with statically checked units (and dimensions). This wraps up
+HMatrix. The `sh` type parameter here contains @[row,column]@ units.
+The outer product of @row@ and @column@ lists gives a matrix of units of
+the same size as the data contained within.
+
+some pain happens to ensure that sh always follows the convention
+that the first element of the column units is 'DOne'. One remaining
+potential error is that you can have @ri ~ '[]@, which would make for
+a 0-row matrix.
+-}
 data DimMat (sh :: [[*]]) a where
      DimMat :: (H.Container H.Matrix a, H.Field a)
         => H.Matrix a -> DimMat [ri, DOne ': ci] a
@@ -141,22 +152,22 @@ type family Canon (a :: k) :: k
 type instance Canon (DimMat [r,c]) = DimMat [MapMul (Head c) r, MapDiv (Head c) c]
 type instance Canon (DimMat [r,c] x) = DimMat [MapMul (Head c) r, MapDiv (Head c) c] x
 
--- | @\a xs -> map (map (const a)) xs@
+-- | @\\a xs -> map (map (const a)) xs@
 type family MapMapConst (a::k) (xs :: [[l]]) :: [[k]]
 type instance MapMapConst a (x ': xs) = MapConst a x ': MapMapConst a xs
 type instance MapMapConst a '[] = '[]
 
--- | @\a xs -> map (const a) xs@
+-- | @\\a xs -> map (const a) xs@
 type family MapConst (a :: k) (xs :: [l]) :: [k]
 type instance MapConst a (x ': xs) = a ': MapConst a xs
 type instance MapConst a '[] = '[]
 
--- | \a xs -> map (/a) xs
+-- | @\\a xs -> map (/a) xs@
 type family MapDiv (a :: *) (xs :: [*]) :: [*]
 type instance MapDiv a (x ': xs) = Div x a ': MapDiv a xs
 type instance MapDiv a '[] = '[]
 
--- | map fst
+-- | @map fst@
 type family MapFst (a :: *) :: [*]
 type instance MapFst ((a,_t) , as) = a ': MapFst as
 type instance MapFst () = '[]
@@ -241,8 +252,8 @@ type family At (a :: [k]) n :: k
 type instance At (a ': as) N.Z = a
 type instance At (a ': as) (N.S n) = At as n
 
--- | @AtEq a n b m c@ calculates @(At a n `Mult` At b m) ~ c@,
--- but can also 
+-- | @AtEq a n b m c@ calculates @(At a n \`Mult\` At b m) ~ c@,
+-- but also can infer part of the `a` if the `b` and `c` are known
 type family AtEq (a :: [*]) n (b :: [*]) m (c :: *) :: Constraint
 type instance AtEq (a ': as) N.Z (b ': bs) N.Z c = (MultEq a b c)
 type instance AtEq (a ': as) (N.S n) bs m c = AtEq as n bs m c
@@ -257,6 +268,7 @@ type instance Head (a ': as) = a
 type family Tail (a :: [k]) :: [k]
 type instance Tail (a ': as) = as
 
+-- | Data.Packed.Matrix.'H.@@>'
 (@@>) :: (N.NumType i, N.NumType j, AtEq ri i ci j ty)
     => DimMat [ri,ci] a
     -> (i, j)
@@ -316,9 +328,9 @@ type ScaleCxt time ri ri' =
      MapDiv time ri' ~ ri,
      Head ri' `Div` Head ri ~ time)
 
-{- | 'H.expm'
+{- | Numeric.LinearAlgebra.Algorithms.'H.expm'
 
-@y t = expm (scale t a) `multiply` y0@ solves the DE @y' = Ay@ where y0 is the
+@y t = expm (scale t a) \`multiply\` y0@ solves the DE @y' = Ay@ where y0 is the
 value of y at time 0
 
 -}
@@ -327,14 +339,14 @@ expm :: (MapRecip ci ~ ri, MapRecip ri ~ ci)
     -> DimMat [ri,ci] a
 expm (DimMat a) = DimMat (H.expm a)
 
-{- | 'H.scale'
+{- | Numeric.Container.'H.scale'
 
 -}
 scale :: (ScaleCxt e ri ri')
     => Quantity e a -> DimMat [ri,ci] a -> DimMat [ri',ci] a
 scale (Dimensional t) (DimMat a) = DimMat (H.scale t a)
 
-{- | 'H.scaleRecip'
+{- | Numeric.Container.'H.scaleRecip'
 -}
 scaleRecip :: (ScaleCxt e' ri ri', Div DOne e ~ e', Div DOne e' ~ e)
     => Quantity e a -> DimMat [ri,ci] a -> DimMat [ri',ci] a
@@ -379,12 +391,11 @@ rank (DimMat a) = H.rank a
 rows (DimMat a) = H.rows a
 cols (DimMat a) = H.cols a
 
--- use proxy?
-rowsNT :: DimMat [ri,ci] a -> Len ri
-rowsNT = error "rowsNT"
+rowsNT :: DimMat [ri,ci] a -> Proxy (Len ri)
+rowsNT _ = Proxy
 
-colsNT :: DimMat [ri,ci] a -> Len ci
-colsNT = error "colsNT"
+colsNT :: DimMat [ri,ci] a -> Proxy (Len ci)
+colsNT _ = Proxy
 
 scalar :: (H.Field a,
           sh ~ ['[u], '[DOne]]) => Quantity u a -> DimMat sh a
@@ -415,29 +426,37 @@ addConstant (Dimensional a) (DimMat b) = DimMat (H.addConstant a b)
 conj :: DimMat sh a -> DimMat sh a
 conj (DimMat a) = DimMat (H.conj a)
 
-{- TODO:
-  H.build ::
-    H.IndexOf c
-    -> hmatrix-0.15.2.0:Numeric.ContainerBoot.ArgOf c e -> c e
-  H.atIndex :: c e -> H.IndexOf c -> e
-  H.minIndex :: c e -> H.IndexOf c
-  H.maxIndex :: c e -> H.IndexOf c
-  H.minElement :: c e -> e
-  H.maxElement :: c e -> e
-  H.sumElements :: c e -> e
-  H.prodElements :: c e -> e
-  H.step :: H.RealElement e => c e -> c e
-  H.cond :: H.RealElement e => c e -> c e -> c e -> c e -> c e -> c e
-  H.find :: (e -> Bool) -> c e -> [H.IndexOf c]
-  H.assoc :: H.IndexOf c -> e -> [(H.IndexOf c, e)] -> c e
-  H.accum :: c e -> (e -> e -> e) -> [(H.IndexOf c, e)] -> c 
+{- $TODO
+
+>   H.build ::
+>     H.IndexOf c
+>     -> hmatrix-0.15.2.0:Numeric.ContainerBoot.ArgOf c e -> c e
+>   H.atIndex :: c e -> H.IndexOf c -> e
+>   H.minIndex :: c e -> H.IndexOf c
+>   H.maxIndex :: c e -> H.IndexOf c
+>   H.minElement :: c e -> e
+>   H.maxElement :: c e -> e
+>   H.sumElements :: c e -> e
+>   H.prodElements :: c e -> e
+>   H.step :: H.RealElement e => c e -> c e
+>   H.cond :: H.RealElement e => c e -> c e -> c e -> c e -> c e -> c e
+>   H.find :: (e -> Bool) -> c e -> [H.IndexOf c]
+>   H.assoc :: H.IndexOf c -> e -> [(H.IndexOf c, e)] -> c e
+>   H.accum :: c e -> (e -> e -> e) -> [(H.IndexOf c, e)] -> c 
 
   (Conjugate transpose for complex matrices?)
+
   Pseudoinverse and related decompositions by LAPACK (SVD, QR etc.)
+ 
   Friendly syntax for introduction (more matD)
+
   Friendly syntax for elimination (matD as pattern)
+
   A pretty-printer that includes the types of each entry
+
   A clean way to get the n x n dimensionless identity matrix
 
   check that all types that could could be inferred are
+
+  default columns/rows to dimensionless?
 -}
