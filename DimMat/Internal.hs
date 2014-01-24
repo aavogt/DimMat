@@ -36,6 +36,7 @@ module DimMat.Internal (
    konst,
    conj,
    addConstant,
+   diag,
 
    -- *** dimension
    cols, rows,
@@ -105,7 +106,8 @@ a 0-row matrix.
 data DimMat (sh :: [[*]]) a where
      DimMat :: (H.Container H.Matrix a, H.Field a)
         => H.Matrix a -> DimMat [ri, DOne ': ci] a
-     DimVec :: (H.Container H.Vector a) => H.Vector a -> DimMat '[sh] a
+     DimVec :: (H.Container H.Vector a, H.Field a)
+        => H.Vector a -> DimMat '[sh] a
 
 -- very crude
 instance (Show a, PPUnits sh) => Show (DimMat sh a) where
@@ -433,6 +435,11 @@ addConstant (Dimensional a) (DimMat b) = DimMat (H.addConstant a b)
 
 conj :: DimMat sh a -> DimMat sh a
 conj (DimMat a) = DimMat (H.conj a)
+
+diag :: (MapConst DOne v ~ c,
+        c ~ (DOne ': _1)
+        ) => DimMat '[v] t -> DimMat '[v,c] t
+diag (DimVec a) = DimMat (H.diag a)
 
 {- |
 
