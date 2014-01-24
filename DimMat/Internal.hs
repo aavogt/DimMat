@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -37,6 +39,7 @@ module DimMat.Internal (
    conj,
    addConstant,
    diag,
+   diagBlock,
 
    -- *** dimension
    cols, rows,
@@ -54,6 +57,7 @@ module DimMat.Internal (
    -- * TODO
    -- $TODO
   ) where
+import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
 import qualified Numeric.AD as AD
 import qualified Numeric.AD.Types as AD
@@ -83,14 +87,18 @@ diff f z = Dimensional $ AD.diff (unD . f . Dimensional) (unD z)
     where unD (Dimensional a) = a
 
 
-{- ???
-grad :: (Num a, Storable (AD.AD t a)) =>
-        (forall s. AD.Mode s => DimVec r (AD.AD s a)
-                             -> Quantity c (AD.AD s a))
-     -> DimVec r a
-     -> DimMat '[c] r a
-grad f x = DimMat (H.fromLists [AD.grad (f . DimVec . H.fromList) (H.toList x)])
--}
+{-
+grad :: (Num a, AreRecips i iinv, H.Element a, Storable a,
+          MapMultEq o iinv r) =>
+        (forall s. (AD.Mode s, H.Container H.Vector (AD.AD s a),
+                    Storable (AD.AD s a), H.Field (AD.AD s a))
+                => DimMat '[i] (AD.AD s a)
+                -> Quantity o (AD.AD s a))
+     -> DimMat '[i] a
+     -> DimMat '[r] a
+grad f (DimVec x) = DimMat (H.fromLists [AD.grad (unQty . f . DimVec . H.fromList) (H.toList x)])
+    where unQty (Dimensional a) = a
+          -}
 
 
 {- | Matrix with statically checked units (and dimensions). This wraps up
@@ -229,6 +237,10 @@ type instance InnerCxt '[] '[] = ()
 type family MapMul (a :: k) (xs :: [k]) :: [k]
 type instance MapMul a '[] = '[]
 type instance MapMul a (x ': xs) = Mul a x ': MapMul a xs
+
+type family MapMultEq (a :: k) (xs :: [k]) (ys :: [k]) :: Constraint
+type instance MapMultEq a (x ': xs) (y ': ys) = (MultEq a x y, MapMultEq a xs ys)
+type instance MapMultEq a '[] '[] = ()
 
 -- | xs*ys = zs: knowing two (one that is not zero) will give the third
 type family ZipWithMul (xs :: [k]) (ys :: [k]) (zs :: [k]) :: Constraint
@@ -443,6 +455,37 @@ diag :: (MapConst DOne v ~ c,
         c ~ (DOne ': _1)
         ) => DimMat '[v] t -> DimMat '[v,c] t
 diag (DimVec a) = DimMat (H.diag a)
+
+-- | 'H.blockDiag'. The blocks should be provided as:
+--
+-- > blockDiag (m1, (m2, (m3, ())))
+--
+-- XXX should we bring in HList for this?
+diagBlock :: (PairsToList t e, db ~ DimMat [ri, DOne ': ci] e,
+              Num e, H.Field e, DiagBlock t db)  => t -> db
+diagBlock pairs = DimMat (H.diagBlock (pairsToList pairs))
+
+class DiagBlock (bs :: *) t
+instance (DiagBlock as as', AppendShOf a as' ~ t) => DiagBlock (a,as) t 
+instance (a ~ a') => DiagBlock (a,()) a'
+
+type family Append (a :: [k]) (b :: [k]) :: [k]
+type instance Append (a ': as) b = a ': Append as b
+type instance Append '[] b = b
+
+type family AppendDims (sh :: [[*]]) (sh' :: [[*]]) :: [[*]]
+type instance AppendDims [a,b] [c,d] = [Append a c, Append b d]
+type instance AppendDims '[a] '[b] = '[Append a b]
+
+type family AppendShOf (a :: *) (b :: *) :: *
+type instance AppendShOf (DimMat sh t) (DimMat sh' t) = DimMat (AppendDims sh sh') t
+
+class PairsToList a t where
+        pairsToList :: a -> [H.Matrix t]
+instance PairsToList () t where
+        pairsToList _ = []
+instance (PairsToList b t, t' ~ t) => PairsToList (DimMat sh t',b) t where
+        pairsToList (DimMat a,b) = a : pairsToList b
 
 {- |
 
