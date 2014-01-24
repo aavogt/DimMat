@@ -21,6 +21,7 @@ module DimMat.Internal (
    inv,
    det,
    expm,
+   eig,
    -- ** H.Container 
    add,
    sub,
@@ -48,7 +49,7 @@ module DimMat.Internal (
    DimMat(..),
    AtEq, MapMul, Inner, InvCxt, SameLengths, Product, MapRecip, ScaleCxt,
    ZipWithZipWithMul, MapMapConst, Len, CanAddConst, PPUnits,
-   PPUnits', Head, MapDiv,
+   PPUnits', Head, MapDiv, AreRecips,
    -- * TODO
    -- $TODO
   ) where
@@ -104,10 +105,16 @@ a 0-row matrix.
 data DimMat (sh :: [[*]]) a where
      DimMat :: (H.Container H.Matrix a, H.Field a)
         => H.Matrix a -> DimMat [ri, DOne ': ci] a
-     DimVec :: H.Vector a -> DimMat '[sh] a
+     DimVec :: (H.Container H.Vector a) => H.Vector a -> DimMat '[sh] a
 
 -- very crude
 instance (Show a, PPUnits sh) => Show (DimMat sh a) where
+    showsPrec _ (DimVec v) = case ppUnits (Proxy :: Proxy sh) of
+        [rs] ->
+            displayS $
+            renderPretty 0.1 80 $ vcat
+             [ dullgreen (string label) <+> string (show e)
+                | (e,label) <- H.toList v `zip` pad rs ]
     showsPrec _ (DimMat m) = case ppUnits (Proxy :: Proxy sh) of
         [rs,cs] -> 
             displayS $
@@ -121,11 +128,12 @@ instance (Show a, PPUnits sh) => Show (DimMat sh a) where
         where
             onHead f (x:xs) = f x : xs
             onHead _ [] = []
-            pad :: [String] -> [String]
-            pad [] = []
-            pad xs = let
-                w = maximum (map length xs)
-                in map (\x -> take w $ x ++ replicate w ' ') xs
+
+pad :: [String] -> [String]
+pad [] = []
+pad xs = let
+    w = maximum (map length xs)
+    in map (\x -> take w $ x ++ replicate w ' ') xs
 
 
 class PPUnits (sh :: [[*]]) where
@@ -425,6 +433,48 @@ addConstant (Dimensional a) (DimMat b) = DimMat (H.addConstant a b)
 
 conj :: DimMat sh a -> DimMat sh a
 conj (DimMat a) = DimMat (H.conj a)
+
+{- |
+
+The Hmatrix eig factors A into P and D where A = P D inv(P) and D is diagonal.
+
+The units for eigenvalues can be figured out:
+
+>               _____
+>      -1       |  c
+> P D P  = A =  |r
+>               |
+
+>       _______
+>       |   d
+> P   = |c
+>       |
+
+>       _______
+>       |   -1
+>       |  c
+>  -1   |   
+> P   = | -1
+>       |d
+
+So we can see that the dimension labeled `d-1` in P inverse is actually the
+same `c` in `A`. The actual units of `d` don't seem to matter because the
+`inv(d)` un-does any units that the `d` adds. So `d` can be all DOne. 
+
+To get the row-units of A to match up, sometimes `D` will have units. 
+The equation ends up as D/c = r
+
+-}
+eig :: ( MapConst DOne r ~ d,
+         SameLengths [r,c,cinv,d,eigval],
+         AreRecips c cinv,
+         ZipWithMul r c eigval,
+         d ~ (DOne ': _2) -- keep the GADT constr happy
+         )
+     => DimMat [r,c] t
+    -> (DimMat '[eigval] (H.Complex Double), DimMat '[cinv,d] (H.Complex Double))
+eig (DimMat a) = case H.eig a of
+    (e,v) -> (DimVec e, DimMat v)
 
 {- $TODO
 
