@@ -86,8 +86,18 @@ grad f x = DimMat (H.fromLists [AD.grad (f . DimVec . H.fromList) (H.toList x)])
 -- convenience: going back to a newtype and adding constraints on all the functions
 -- for DimMat might happen.
 data DimMat (sh :: [[*]]) a where
-     DimMat :: (H.Container H.Matrix a, H.Field a) => H.Matrix a -> DimMat sh a
-     -- DimVec :: H.Vector a -> DimMat sh a?
+     DimMat :: (H.Container H.Matrix a, H.Field a)
+        => H.Matrix a -> DimMat [ri, DOne ': ci] a
+     DimVec :: H.Vector a -> DimMat '[sh] a
+
+-- | put the DimMat into a canonical form, which has a DOne as the first
+-- element of the colUnits (2nd) list. Instances for kinds @*@ and @* -> *@
+-- 
+-- should not be needed, since the GADT does not allow making non-canonical
+-- DimMats
+type family Canon (a :: k) :: k
+type instance Canon (DimMat [r,c]) = DimMat [MapMul (Head c) r, MapDiv (Head c) c]
+type instance Canon (DimMat [r,c] x) = DimMat [MapMul (Head c) r, MapDiv (Head c) c] x
 
 -- | @\a xs -> map (map (const a)) xs@
 type family MapMapConst (a::k) (xs :: [[l]]) :: [[k]]
@@ -185,26 +195,28 @@ type family At (a :: [k]) n :: k
 type instance At (a ': as) N.Z = a
 type instance At (a ': as) (N.S n) = At as n
 
--- | put the DimMat into a canonical form, which has a DOne as the first
--- elemen of the colUnits (2nd) list. Instances for kinds @*@ and @* -> *@
-type family Canon (a :: k) :: k
-type instance Canon (DimMat [r,c]) = DimMat [MapMul (Head c) r, MapDiv (Head c) c]
-type instance Canon (DimMat [r,c] x) = DimMat [MapMul (Head c) r, MapDiv (Head c) c] x
 
 type family Head (a :: [k]) :: k
 type instance Head (a ': as) = a
+
+type family Tail (a :: [k]) :: [k]
+type instance Tail (a ': as) = as
 
 (@@>) :: (N.NumType i, N.NumType j) => DimMat [ri,ci] a
     -> (i, j)
     -> Quantity ( (ri `At` i) `Mul` (ci `At` j) ) a
 DimMat m @@> (i,j) = Dimensional (m H.@@> (N.toNum i,N.toNum j))
 
-multiply :: H.Product a => DimMat [ri,ci] a -> DimMat [rj,cj] a
-    -> DimMat [MapMul (Inner ci rj) ri, cj] a
+multiply :: (H.Product a,
+            sh' ~ [MapMul (Inner ci rj) ri, cj])
+    => DimMat [ri,ci] a -> DimMat [rj,cj] a
+    -> DimMat sh' a
 multiply (DimMat a) (DimMat b) = DimMat (H.multiply a b)
 
-trans :: one ~ DOne => DimMat [a11 ': ri, one ': ci] a
-                    -> DimMat [a11 ': ci, one ': ri] a
+trans :: (one ~ DOne,
+         sh  ~ [a11 ': ri, one ': ci],
+         sh' ~ [a11 ': ci, one ': ri])
+         => DimMat sh a -> DimMat sh' a
 trans (DimMat a) = DimMat (H.trans a)
 
 type family AreRecips (a :: [k]) (b :: [k]) :: Constraint
@@ -236,7 +248,7 @@ type instance InvCxt
         dOne ~ DOne, dOne' ~ DOne, a11 ~ Div DOne a11', a11' ~ Div DOne a11)
 
 
-inv :: InvCxt sh sh' => DimMat sh a -> DimMat sh' a
+inv :: (InvCxt sh sh', sh' ~ [ri2, [DOne, ci2]]) => DimMat sh a -> DimMat sh' a
 inv (DimMat a) = DimMat (H.inv a)
 
 det :: (SameLengths [ri,ci]) => DimMat [ri,ci] a
@@ -280,13 +292,15 @@ liftH2 f (DimMat a) (DimMat b) = DimMat (f a b)
 add a b = liftH2 H.add a b
 sub a b = liftH2 H.sub a b
 
-mul :: ZipWithZipWithMul sh sh' sh'' => DimMat sh a -> DimMat sh' a -> DimMat sh'' a
+mul :: (ZipWithZipWithMul sh sh' sh'',
+       sh'' ~ [_1 ': _2, DOne ': _3]) => DimMat sh a -> DimMat sh' a -> DimMat sh'' a
 mul (DimMat a) (DimMat b) = DimMat (H.mul a b)
 
-divide :: ZipWithZipWithMul sh' sh'' sh => DimMat sh a -> DimMat sh' a -> DimMat sh'' a
+divide :: (ZipWithZipWithMul sh' sh'' sh,
+          sh'' ~ [_1 ': _2,DOne ': _3]) => DimMat sh a -> DimMat sh' a -> DimMat sh'' a
 divide (DimMat a) (DimMat b) = DimMat (H.divide a b)
 
-arctan2 :: DimMat sh a -> DimMat sh a -> DimMat (MapMapConst DOne sh) a
+arctan2 :: (sh' ~ MapMapConst DOne sh) => DimMat sh a -> DimMat sh a -> DimMat sh' a
 arctan2 (DimMat a) (DimMat b) = DimMat (H.arctan2 a b)
 
 equal :: (m ~ DimMat [ri,ci] a) => m -> m -> Bool
@@ -317,12 +331,14 @@ rowsNT = error "rowsNT"
 colsNT :: DimMat [ri,ci] a -> Len ci
 colsNT = error "colsNT"
 
-scalar :: (H.Field a) => Quantity u a -> DimMat ['[u], '[DOne]] a
+scalar :: (H.Field a,
+          sh ~ ['[u], '[DOne]]) => Quantity u a -> DimMat sh a
 scalar (Dimensional a) = DimMat (H.scalar a)
 
-konst :: forall u us ones a. (H.Field a,
+konst :: forall sh u us ones a _1. (H.Field a,
                               N.NumTypeI (Len ones),
-                              N.NumTypeI (Len us))
+                              N.NumTypeI (Len us),
+                              ones ~ (DOne ': _1))
     => Quantity u a -> DimMat [us, ones] a
 konst (Dimensional a) = DimMat (H.konst a
     (N.toNum (undefined :: Len us),
