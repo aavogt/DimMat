@@ -50,7 +50,7 @@ module DimMat.Internal (
    DimMat(..),
    AtEq, MapMul, Inner, InvCxt, SameLengths, Product, MapRecip, ScaleCxt,
    ZipWithZipWithMul, MapMapConst, Len, CanAddConst, PPUnits,
-   PPUnits', Head, MapDiv, AreRecips,
+   PPUnits', Head, MapDiv, AreRecips, ZipWithMul,
    -- * TODO
    -- $TODO
   ) where
@@ -344,7 +344,7 @@ type ScaleCxt time ri ri' =
 value of y at time 0
 
 -}
-expm :: (MapRecip ci ~ ri, MapRecip ri ~ ci)
+expm :: (AreRecips ri ci)
     => DimMat [ri,ci] a
     -> DimMat [ri,ci] a
 expm (DimMat a) = DimMat (H.expm a)
@@ -384,6 +384,9 @@ equal :: (m ~ DimMat [ri,ci] a) => m -> m -> Bool
 equal (DimMat a) (DimMat b) = H.equal a b
 
 -- how to nicely defunctionalize? See Fun' Fun in HList?
+-- ideally any transformation of units (say replace all metre by seconds)
+-- that still fits should work. This will involve re-doing the lookups
+-- done in 'matD'
 cmap :: (ScaleCxt deltaE ri ri')
     => proxy deltaE
     -> (forall l m t i th n j e. 
@@ -466,7 +469,9 @@ The units for eigenvalues can be figured out:
 
 So we can see that the dimension labeled `d-1` in P inverse is actually the
 same `c` in `A`. The actual units of `d` don't seem to matter because the
-`inv(d)` un-does any units that the `d` adds. So `d` can be all DOne. 
+`inv(d)` un-does any units that the `d` adds. So `d` can be all DOne. But
+another choice, such as 1/c would be more appropriate, since then you can
+expm your eigenvectors (not that that seems to be something people do)?
 
 To get the row-units of A to match up, sometimes `D` will have units. 
 The equation ends up as D/c = r
