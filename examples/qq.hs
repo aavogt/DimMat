@@ -36,6 +36,8 @@ You get the same thing back (except for different type defaulting)
 >>> x01
 1 m s
 
+>>> det xs
+0.0 m kg s^2
 
 -}
 xs = [matD| x00,x01; x10,x11 |]
@@ -49,3 +51,4 @@ xs = [matD| x00,x01; x10,x11 |]
 
 -}
 y = case xs of [matD| a,_;_,_ |] -> a
+

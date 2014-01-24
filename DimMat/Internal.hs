@@ -1,3 +1,4 @@
+{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
@@ -57,6 +58,10 @@ import qualified Numeric.NumType.TF as N
 import qualified Numeric.LinearAlgebra as H
 import qualified Numeric.LinearAlgebra.LAPACK as H
 
+import Data.Proxy
+import Text.PrettyPrint
+import Data.List (transpose)
+
 {- |
 >>> let ke velocity = velocity*velocity*(1*~kilo gram)
 >>> diff ke (3 *~ (metre/second))
@@ -90,6 +95,34 @@ data DimMat (sh :: [[*]]) a where
         => H.Matrix a -> DimMat [ri, DOne ': ci] a
      DimVec :: H.Vector a -> DimMat '[sh] a
 
+-- very crude
+instance (Show a, PPUnits sh) => Show (DimMat sh a) where
+    show (DimMat m) = case ppUnits (Proxy :: Proxy sh) of
+        [rs,cs] -> 
+            render $ vcat $
+            map hsep $
+            transpose $
+            zipWith (\label c -> label : c)
+                (text (show (H.rows m) ++ "><"++ show (H.cols m)) :
+                        (map (\c -> text ("| "++c)) cs)) $
+            transpose $
+            zipWith (\r e -> text r : map (text . show) e) rs (H.toLists m)
+
+class PPUnits (sh :: [[*]]) where
+    ppUnits :: Proxy sh -> [[String]]
+instance (PPUnits' x, PPUnits xs) => PPUnits (x ': xs) where
+    ppUnits _ = ppUnits' (Proxy :: Proxy x) : ppUnits (Proxy :: Proxy xs)
+instance PPUnits '[] where
+    ppUnits _ = []
+
+class PPUnits' (sh :: [*]) where
+    ppUnits' :: Proxy sh -> [String]
+instance (PPUnits' xs) => PPUnits' (DOne ': xs) where
+    ppUnits' _ = "1" : ppUnits' (error "ppUnits'" :: Proxy xs)
+instance (Show x, PPUnits' xs) => PPUnits' (x ': xs) where
+    ppUnits' _ = show (error "ppUnits'" :: x) : ppUnits' (error "ppUnits'" :: Proxy xs)
+instance PPUnits' '[] where
+    ppUnits' _ = []
 -- | put the DimMat into a canonical form, which has a DOne as the first
 -- element of the colUnits (2nd) list. Instances for kinds @*@ and @* -> *@
 -- 
@@ -247,12 +280,11 @@ type instance InvCxt
         (SameLengths [ri,ci,ri',ci'], AreRecips ri ci', AreRecips ci ri',
         dOne ~ DOne, dOne' ~ DOne, a11 ~ Div DOne a11', a11' ~ Div DOne a11)
 
-
-inv :: (InvCxt sh sh', sh' ~ [ri2, [DOne, ci2]]) => DimMat sh a -> DimMat sh' a
+inv :: (InvCxt sh sh', sh' ~ [ri2 ': _1 , DOne ': ci2]) => DimMat sh a -> DimMat sh' a
 inv (DimMat a) = DimMat (H.inv a)
 
 det :: (SameLengths [ri,ci]) => DimMat [ri,ci] a
-        -> Dimensional v (Product ri `Mul` Product ci) a
+        -> Quantity (Product ri `Mul` Product ci) a
 det (DimMat a) = Dimensional (H.det a)
 
 -- | multiplying by a scalar, like 'H.scalar' from hmatrix's 'H.Container' class
