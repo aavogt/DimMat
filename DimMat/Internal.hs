@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -22,10 +23,17 @@ module DimMat.Internal (
    -- ** H.Container 
    add,
    sub,
-   scale,
+   scale, scaleRecip,
    equal,
    cmap,
    rank,
+   mul,
+   divide,
+   arctan2,
+   scalar,
+   konst,
+   conj,
+   addConstant,
 
    -- *** dimension
    cols, rows,
@@ -47,10 +55,7 @@ import qualified Prelude as P
 import qualified Numeric.NumType.TF as N
 
 import qualified Numeric.LinearAlgebra as H
-import qualified Data.Packed.Matrix as H
 import qualified Numeric.LinearAlgebra.LAPACK as H
-
-import Language.Haskell.TH
 
 {- |
 >>> let ke velocity = velocity*velocity*(1*~kilo gram)
@@ -84,11 +89,22 @@ data DimMat (sh :: [[*]]) a where
      DimMat :: (H.Container H.Matrix a, H.Field a) => H.Matrix a -> DimMat sh a
      -- DimVec :: H.Vector a -> DimMat sh a?
 
+-- | @\a xs -> map (map (const a)) xs@
+type family MapMapConst (a::k) (xs :: [[l]]) :: [[k]]
+type instance MapMapConst a (x ': xs) = MapConst a x ': MapMapConst a xs
+type instance MapMapConst a '[] = '[]
 
+-- | @\a xs -> map (const a) xs@
+type family MapConst (a :: k) (xs :: [l]) :: [k]
+type instance MapConst a (x ': xs) = a ': MapConst a xs
+type instance MapConst a '[] = '[]
+
+-- | \a xs -> map (/a) xs
 type family MapDiv (a :: *) (xs :: [*]) :: [*]
 type instance MapDiv a (x ': xs) = Div x a ': MapDiv a xs
 type instance MapDiv a '[] = '[]
 
+-- | map fst
 type family MapFst (a :: *) :: [*]
 type instance MapFst ((a,_t) , as) = a ': MapFst as
 type instance MapFst () = '[]
@@ -98,6 +114,7 @@ type instance Fst (a,b) = a
 type family Snd (a :: *) :: *
 type instance Snd (a,b) = b
 
+-- | convert from (a,(b,(c,(d,())))) to '[a,b,c,d]
 type family FromPairs (a :: *) :: [*]
 type instance FromPairs (a,b) = a ': FromPairs b
 type instance FromPairs () = '[]
@@ -140,6 +157,17 @@ type family MapMul (a :: k) (xs :: [k]) :: [k]
 type instance MapMul a '[] = '[]
 type instance MapMul a (x ': xs) = Mul a x ': MapMul a xs
 
+-- | xs*ys = zs: knowing two (one that is not zero) will give the third
+type family ZipWithMul (xs :: [k]) (ys :: [k]) (zs :: [k]) :: Constraint
+type instance ZipWithMul (x ': xs) (y ': ys) (z ': zs)
+        = (Mul x y ~ z, Div z x ~ y, Div z y ~ x, ZipWithMul xs ys zs)
+type instance ZipWithMul '[] '[] '[] = ()
+
+type family ZipWithZipWithMul (xs :: [[k]]) (ys :: [[k]]) (zs :: [[k]]) :: Constraint
+type instance ZipWithZipWithMul (x ': xs) (y ': ys) (z ': zs)
+    = (ZipWithMul x y z, ZipWithZipWithMul xs ys zs)
+type instance ZipWithZipWithMul '[] '[] '[] = ()
+
 type family Product (a :: [k]) :: k
 type instance Product (a ': as) = Mul a (Product as)
 type instance Product '[] = DOne
@@ -149,7 +177,7 @@ type instance MapRecip (a ': as) = Div DOne a ': MapRecip as
 type instance MapRecip '[] = '[]
 
 
-type family Len (a :: [k]) :: *
+type family Len (a :: [*]) :: *
 type instance Len '[] = N.Z
 type instance Len (a ': as) = N.S (Len as)
 
@@ -221,24 +249,26 @@ type ScaleCxt time ri ri' =
      MapDiv time ri' ~ ri,
      Head ri' `Div` Head ri ~ time)
 
-{- | @y t = expm t a `multiply` y0@ solves the DE @y' = Ay@ where y0 is the
+{- | 'H.expm'
+
+@y t = expm (scale t a) `multiply` y0@ solves the DE @y' = Ay@ where y0 is the
 value of y at time 0
 
-The convention for splitting out the time follows from
-<http://www.netlib.org/ieeecss/cascade/pade.f>, is different from
-the hmatrix 'H.expm'
+-}
+expm :: (MapRecip ci ~ ri, MapRecip ri ~ ci)
+    => DimMat [ri,ci] a
+    -> DimMat [ri,ci] a
+expm (DimMat a) = DimMat (H.expm a)
+
+{- | 'H.scale'
 
 -}
-expm :: (ScaleCxt time ri ri')
-    => Quantity time a
-    -> DimMat [ri,ci] a
-    -> DimMat [ri',ci] a
-expm (Dimensional t) (DimMat a) = DimMat (H.expm (H.scale t a))
-
 scale :: (ScaleCxt e ri ri')
     => Quantity e a -> DimMat [ri,ci] a -> DimMat [ri',ci] a
 scale (Dimensional t) (DimMat a) = DimMat (H.scale t a)
 
+{- | 'H.scaleRecip'
+-}
 scaleRecip :: (ScaleCxt e' ri ri', Div DOne e ~ e', Div DOne e' ~ e)
     => Quantity e a -> DimMat [ri,ci] a -> DimMat [ri',ci] a
 scaleRecip (Dimensional t) (DimMat a) = DimMat (H.scale t a)
@@ -249,11 +279,15 @@ liftH2 f (DimMat a) (DimMat b) = DimMat (f a b)
 
 add a b = liftH2 H.add a b
 sub a b = liftH2 H.sub a b
-{- | but types change!
-mul a b = liftH2 H.mul a b
-divide a b = liftH2 H.divide a b
-arctan2 a b = liftH2 H.arctan2 a b
--}
+
+mul :: ZipWithZipWithMul sh sh' sh'' => DimMat sh a -> DimMat sh' a -> DimMat sh'' a
+mul (DimMat a) (DimMat b) = DimMat (H.mul a b)
+
+divide :: ZipWithZipWithMul sh' sh'' sh => DimMat sh a -> DimMat sh' a -> DimMat sh'' a
+divide (DimMat a) (DimMat b) = DimMat (H.divide a b)
+
+arctan2 :: DimMat sh a -> DimMat sh a -> DimMat (MapMapConst DOne sh) a
+arctan2 (DimMat a) (DimMat b) = DimMat (H.arctan2 a b)
 
 equal :: (m ~ DimMat [ri,ci] a) => m -> m -> Bool
 equal (DimMat a) (DimMat b) = H.equal a b
@@ -283,12 +317,34 @@ rowsNT = error "rowsNT"
 colsNT :: DimMat [ri,ci] a -> Len ci
 colsNT = error "colsNT"
 
+scalar :: (H.Field a) => Quantity u a -> DimMat ['[u], '[DOne]] a
+scalar (Dimensional a) = DimMat (H.scalar a)
+
+konst :: forall u us ones a. (H.Field a,
+                              N.NumTypeI (Len ones),
+                              N.NumTypeI (Len us))
+    => Quantity u a -> DimMat [us, ones] a
+konst (Dimensional a) = DimMat (H.konst a
+    (N.toNum (undefined :: Len us),
+     N.toNum (undefined :: Len ones)))
+
+type family CanAddConst (a :: k) (m :: [[k]]) :: Constraint
+type instance CanAddConst a [as, ones] = (AllEq a as, AllEq DOne ones)
+
+type family AllEq (a :: k) (xs :: [k]) :: Constraint
+type instance AllEq a (x ': xs) = (a ~ x, AllEq a xs)
+type instance AllEq a '[] = ()
+
+addConstant :: (H.Field a, CanAddConst u sh)
+    => Quantity u a
+    -> DimMat sh a
+    -> DimMat sh a
+addConstant (Dimensional a) (DimMat b) = DimMat (H.addConstant a b)
+
+conj :: DimMat sh a -> DimMat sh a
+conj (DimMat a) = DimMat (H.conj a)
+
 {- TODO:
-  H.scalar :: e -> c e
-  H.conj :: c e -> c e
-  H.addConstant :: e -> c e -> c e
-  H.equal :: c e -> c e -> Bool
-  H.konst :: e -> H.IndexOf c -> c e
   H.build ::
     H.IndexOf c
     -> hmatrix-0.15.2.0:Numeric.ContainerBoot.ArgOf c e -> c e
@@ -311,5 +367,4 @@ colsNT = error "colsNT"
   Friendly syntax for elimination (matD as pattern)
   A pretty-printer that includes the types of each entry
   A clean way to get the n x n dimensionless identity matrix
-
 -}
