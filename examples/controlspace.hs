@@ -1,3 +1,6 @@
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -6,10 +9,9 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 module T1 where
-import DimMat.Internal
-import DimMat.QQ
+import DimMat
 import Numeric.Units.Dimensional.TF.Prelude
-import Numeric.LinearAlgebra.Algorithms
+-- import Numeric.LinearAlgebra.Algorithms
 import qualified Prelude as P
 
 
@@ -72,7 +74,13 @@ data ContinuousLtiSystem (xs :: [*]) (ys :: [*]) (us :: [*]) t = LtiSystem
 														           c' :: DimMat (DivideVectors ys xs) t,
 														           d' :: DimMat (DivideVectors ys us) t
 													             }
-  deriving Show
+deriving instance
+    (PPUnits (DivideVectors ys us),
+     PPUnits (DivideVectors ys xs),
+     PPUnits (DivideVectors (MapDiv DTime xs) xs),
+     PPUnits (DivideVectors (MapDiv DTime xs) us),
+     Show t)
+    => Show (ContinuousLtiSystem xs ys us t) 
 
 type ExampleSystem = ContinuousLtiSystem '[DLength, DVelocity, DOne, DFrequency] '[DLength, DOne] '[DForce] Double
 
