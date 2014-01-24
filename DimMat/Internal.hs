@@ -59,7 +59,7 @@ import qualified Numeric.LinearAlgebra as H
 import qualified Numeric.LinearAlgebra.LAPACK as H
 
 import Data.Proxy
-import Text.PrettyPrint
+import Text.PrettyPrint.ANSI.Leijen
 import Data.List (transpose)
 
 {- |
@@ -97,16 +97,25 @@ data DimMat (sh :: [[*]]) a where
 
 -- very crude
 instance (Show a, PPUnits sh) => Show (DimMat sh a) where
-    show (DimMat m) = case ppUnits (Proxy :: Proxy sh) of
+    showsPrec _ (DimMat m) = case ppUnits (Proxy :: Proxy sh) of
         [rs,cs] -> 
-            render $ vcat $
-            map hsep $
+            displayS $
+            renderPretty 0.1 80 $ vcat $
+            map (hsep . onHead dullgreen) $
+            transpose $ map (onHead dullgreen . map string . pad) $
+            zipWith (\a b -> a:b)
+                ((show (H.rows m) ++ "><"++ show (H.cols m)) : cs) $
             transpose $
-            zipWith (\label c -> label : c)
-                (text (show (H.rows m) ++ "><"++ show (H.cols m)) :
-                        (map (\c -> text ("| "++c)) cs)) $
-            transpose $
-            zipWith (\r e -> text r : map (text . show) e) rs (H.toLists m)
+            zipWith (\r e -> r : map show e) rs (H.toLists m)
+        where
+            onHead f (x:xs) = f x : xs
+            onHead _ [] = []
+            pad :: [String] -> [String]
+            pad [] = []
+            pad xs = let
+                w = maximum (map length xs)
+                in map (\x -> take w $ x ++ replicate w ' ') xs
+
 
 class PPUnits (sh :: [[*]]) where
     ppUnits :: Proxy sh -> [[String]]

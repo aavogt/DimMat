@@ -23,7 +23,7 @@ library
                        ad >=3.4 && <3.5,
                        hmatrix >=0.15 && <0.16,
                        tagged,
-                       pretty
+                       ansi-wl-pprint
   default-language:    Haskell2010
   other-extensions:    TemplateHaskell,
                        FlexibleContexts,
