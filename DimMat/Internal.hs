@@ -212,31 +212,44 @@ type instance MapMul a (x ': xs) = Mul a x ': MapMul a xs
 -- | xs*ys = zs: knowing two (one that is not zero) will give the third
 type family ZipWithMul (xs :: [k]) (ys :: [k]) (zs :: [k]) :: Constraint
 type instance ZipWithMul (x ': xs) (y ': ys) (z ': zs)
-        = (Mul x y ~ z, Div z x ~ y, Div z y ~ x, ZipWithMul xs ys zs)
+        = (MultEq x y z, ZipWithMul xs ys zs)
 type instance ZipWithMul '[] '[] '[] = ()
 
+-- | zipWith (zipWith Mul) xs ys ~ zs
 type family ZipWithZipWithMul (xs :: [[k]]) (ys :: [[k]]) (zs :: [[k]]) :: Constraint
 type instance ZipWithZipWithMul (x ': xs) (y ': ys) (z ': zs)
     = (ZipWithMul x y z, ZipWithZipWithMul xs ys zs)
 type instance ZipWithZipWithMul '[] '[] '[] = ()
 
+-- | 'product'
 type family Product (a :: [k]) :: k
 type instance Product (a ': as) = Mul a (Product as)
 type instance Product '[] = DOne
 
+-- | @map recip@
 type family MapRecip (a :: [k]) :: [k]
 type instance MapRecip (a ': as) = Div DOne a ': MapRecip as
 type instance MapRecip '[] = '[]
 
-
+-- | 'length'
 type family Len (a :: [*]) :: *
 type instance Len '[] = N.Z
 type instance Len (a ': as) = N.S (Len as)
 
+-- | @At a n@ is the type-level version of @a !! n@
 type family At (a :: [k]) n :: k
 type instance At (a ': as) N.Z = a
 type instance At (a ': as) (N.S n) = At as n
 
+-- | @AtEq a n b m c@ calculates @(At a n `Mult` At b m) ~ c@,
+-- but can also 
+type family AtEq (a :: [*]) n (b :: [*]) m (c :: *) :: Constraint
+type instance AtEq (a ': as) N.Z (b ': bs) N.Z c = (MultEq a b c)
+type instance AtEq (a ': as) (N.S n) bs m c = AtEq as n bs m c
+type instance AtEq as N.Z (b ': bs) (N.S m) c = AtEq as N.Z bs m c
+
+-- | multiplication with information going in any direction
+type MultEq a b c = (Mul a b ~ c, Div c a ~ b, Div c b ~ a)
 
 type family Head (a :: [k]) :: k
 type instance Head (a ': as) = a
@@ -244,9 +257,10 @@ type instance Head (a ': as) = a
 type family Tail (a :: [k]) :: [k]
 type instance Tail (a ': as) = as
 
-(@@>) :: (N.NumType i, N.NumType j) => DimMat [ri,ci] a
+(@@>) :: (N.NumType i, N.NumType j, AtEq ri i ci j ty)
+    => DimMat [ri,ci] a
     -> (i, j)
-    -> Quantity ( (ri `At` i) `Mul` (ci `At` j) ) a
+    -> Quantity ty a
 DimMat m @@> (i,j) = Dimensional (m H.@@> (N.toNum i,N.toNum j))
 
 multiply :: (H.Product a,
@@ -424,4 +438,6 @@ conj (DimMat a) = DimMat (H.conj a)
   Friendly syntax for elimination (matD as pattern)
   A pretty-printer that includes the types of each entry
   A clean way to get the n x n dimensionless identity matrix
+
+  check that all types that could could be inferred are
 -}

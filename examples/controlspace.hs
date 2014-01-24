@@ -14,8 +14,6 @@ a43 = 31.1818 *~ (second ^ neg2)
 d0 = _0 :: Dimensionless Double
 d1 = _1 :: Dimensionless Double
 
--- this hint definitely shouldn't be needed
-hint1 = 0 *~ (metre * second^neg3)
 
 {- |
 
@@ -38,7 +36,7 @@ s^-1   0.0 -0.1818 2.6727  0.0
 m^-1 s 0.0 -0.4545 31.1818 0.0
 
 -}
-a = [matD| d0,  d1,  hint1, _0;
+a = [matD| d0,  _1,  _0, _0;
            _0, a22, a23, _0;
            d0,  _0,  _0, _1;
            _0, a42, a43, _0 |]
