@@ -344,9 +344,10 @@ type family MapMul (a :: k) (xs :: [k]) :: [k]
 type instance MapMul a '[] = '[]
 type instance MapMul a (x ': xs) = Mul a x ': MapMul a xs
 
-type family MapMultEq (a :: k) (xs :: [k]) (ys :: [k]) :: Constraint
-type instance MapMultEq a (x ': xs) (y ': ys) = (MultEq a x y, MapMultEq a xs ys)
-type instance MapMultEq a '[] '[] = ()
+type MapMultEq a xs ys = (SameLengths [xs,ys], MapMultEq' a xs ys)
+type family MapMultEq' (a :: k) (xs :: [k]) (ys :: [k]) :: Constraint
+type instance MapMultEq' a (x ': xs) (y ': ys) = (MultEq a x y, MapMultEq' a xs ys)
+type instance MapMultEq' a '[] '[] = ()
 
 -- | xs*ys = zs: knowing two (one that is not zero) will give the third
 type family ZipWithMul (xs :: [k]) (ys :: [k]) (zs :: [k]) :: Constraint
@@ -530,8 +531,20 @@ cmap _ f m = error "cmap not implemented"
      will be useful. 
     -}
 
-hconcat :: (AppendEq ci1 ci2 ci3, ci3 ~ (DOne ': _1)) =>
-    DimMat [ri,ci1] a -> DimMat [ri,ci2] a -> DimMat [ri, ci3] a
+{- | the slightly involved type here exists because
+ci1 and ci2 both start with DOne, but ci2's contribution
+to ci3 does not need a DOne at the start. Another way to
+read the constraints here is:
+
+> map (*rem) (a11 : ri) = b11 : bi
+> ci3 = ci1 ++ map (*rem) ci2
+
+-}
+hconcat :: (MultEq a11 rem b11,
+            MapMultEq rem ci2 ci2',
+            MapMultEq rem ri bi,
+            AppendEq ci1 ci2' ci3) =>
+    DimMat [a11 ': ri,ci1] a -> DimMat [b11 ': bi, ci2] a -> DimMat [a11 ': ri, ci3] a
 hconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a, b]])
 
 vconcat :: AppendEq ri1 ri2 ri3 =>
