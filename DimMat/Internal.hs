@@ -37,6 +37,7 @@ module DimMat.Internal (
    scalar,
    konst,
    conj,
+   ctrans,
    addConstant,
    diag,
    diagBlock,
@@ -451,6 +452,12 @@ addConstant (Dimensional a) (DimMat b) = DimMat (H.addConstant a b)
 conj :: DimMat sh a -> DimMat sh a
 conj (DimMat a) = DimMat (H.conj a)
 
+ctrans :: (one ~ DOne,
+         sh  ~ [a11 ': ri, one ': ci],
+         sh' ~ [a11 ': ci, one ': ri])
+         => DimMat sh a -> DimMat sh' a
+ctrans = conj . trans
+
 diag :: (MapConst DOne v ~ c,
         c ~ (DOne ': _1)
         ) => DimMat '[v] t -> DimMat '[v,c] t
@@ -463,7 +470,7 @@ diag (DimVec a) = DimMat (H.diag a)
 -- XXX should we bring in HList for this?
 diagBlock :: (PairsToList t e, db ~ DimMat [ri, DOne ': ci] e,
               Num e, H.Field e, DiagBlock t db)  => t -> db
-diagBlock pairs = DimMat (H.diagBlock (pairsToList pairs))
+diagBlock pairs = undefined
 
 class DiagBlock (bs :: *) t
 instance (DiagBlock as as', AppendShOf a as' ~ t) => DiagBlock (a,as) t 
@@ -548,8 +555,6 @@ eig (DimMat a) = case H.eig a of
 >   H.find :: (e -> Bool) -> c e -> [H.IndexOf c]
 >   H.assoc :: H.IndexOf c -> e -> [(H.IndexOf c, e)] -> c e
 >   H.accum :: c e -> (e -> e -> e) -> [(H.IndexOf c, e)] -> c 
-
-  (Conjugate transpose for complex matrices?)
 
   Pseudoinverse and related decompositions by LAPACK (SVD, QR etc.)
  
