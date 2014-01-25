@@ -1,8 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 -- | a variation on <http://hackage.haskell.org/package/hmatrix-syntax>,
 -- which constructs a matrix which has dimensions stored.
-module DimMat.QQ (matD,
-   incr) where
+module DimMat.QQ (matD) where
 
 import Data.Packed.Syntax.Internal
 import Language.Haskell.TH
