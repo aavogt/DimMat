@@ -34,6 +34,8 @@ module DimMat.Internal (
    mul,
    divide,
    arctan2,
+   hconcat,
+   vconcat,
    scalar,
    konst,
    conj,
@@ -412,6 +414,12 @@ cmap _ f m = error "cmap not implemented"
     {- H.mapMatrixWithIndex
      will be useful. 
     -}
+
+hconcat :: DimMat [ri,ci1] a -> DimMat [ri,ci2] a -> DimMat [ri, Append ci1 ci2] a
+hconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a, b]])
+
+vconcat :: DimMat [ri1,ci] a -> DimMat [ri2,ci] a -> DimMat [Append ri1 ri2, ci] a
+vconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a],[b]])
 
 rank (DimMat a) = H.rank a
 rows (DimMat a) = H.rows a
