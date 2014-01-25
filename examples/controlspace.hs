@@ -69,11 +69,11 @@ type family DivideVectors (to :: [*]) (from :: [*]) :: [[*]]
 -- also it is called an LTI system (emphasis on the T) and not a linear-and-integration-variable-invariant system
 data ContinuousLtiSystem (xs :: [*]) (ys :: [*]) (us :: [*]) t = LtiSystem 
                                                                  {
-													               a' :: DimMat (DivideVectors (MapDiv DTime xs) xs) t,
-														           b' :: DimMat (DivideVectors (MapDiv DTime xs) us) t,
-														           c' :: DimMat (DivideVectors ys xs) t,
-														           d' :: DimMat (DivideVectors ys us) t
-													             }
+                                                                   a' :: DimMat (DivideVectors (MapDiv DTime xs) xs) t,
+                                                                   b' :: DimMat (DivideVectors (MapDiv DTime xs) us) t,
+                                                                   c' :: DimMat (DivideVectors ys xs) t,
+                                                                   d' :: DimMat (DivideVectors ys us) t
+                                                                 }
 deriving instance
     (PPUnits (DivideVectors ys us),
      PPUnits (DivideVectors ys xs),
