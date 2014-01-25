@@ -1,8 +1,8 @@
 # compile-time checked units for matrices
-While `dimensional-tf` works well, but it only works for scalars. Two related generalizations are explored in this package:
+While `dimensional-tf` works well, it only works for scalars. Two related generalizations are explored in this package:
 
 * automatic differentiation (`ad` package) that knows about units
-* wrap operations provided by HMatrix
+* wrap operations provided by HMatrix so they know about units too
 
 also included is a quasiquote (for expressions and patterns). See `examples/qq.hs`
 
