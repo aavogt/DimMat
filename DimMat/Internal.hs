@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverlappingInstances #-}
@@ -14,40 +15,133 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
--- similar to Doug McLean's work
+{- | an incomplete extension of dimensional-tf to work with hmatrix and ad
+Haddocks are organized to follow hmatrix
+
+  Friendly syntax for introduction (more matD)
+
+  Friendly syntax for elimination (matD as pattern)
+
+  A pretty-printer that multiplies out the dimensions at each place?
+  The current show instance
+
+  A clean way to get the n x n dimensionless identity matrix
+
+  check that all types that could could be inferred are
+
+  default columns/rows to dimensionless?
+
+  missing operations (check export list comments)
+-}
 module DimMat.Internal (
-   -- * hmatrix
-   (@@>),
-   multiply,
+   -- * Data.Packed.Vector
+   -- * Data.Packed.Matrix
+   -- ** dimension
+   cols, rows,
+   colsNT, rowsNT,
+   -- (><),
    trans,
-   inv,
-   det,
-   expm,
-   eig,
-   -- ** H.Container 
+   -- reshape, flatten, fromLists, toLists, buildMatrix,
+   (@@>),
+   -- asRow, asColumn, fromRows, toRows, fromColumns, toColumns
+   -- fromBlocks
+#if MIN_VERSION_hmatrix(0,15,0)
+   diagBlock,
+#endif
+   -- toBlocks, toBlocksEvery, repmat, flipud, fliprl
+   -- subMatrix, takeRows, dropRows, takeColumns, dropColumns,
+   -- extractRows, diagRect, takeDiag, mapMatrix,
+   -- mapMatrixWithIndexM, mapMatrixWithIndexM_, liftMatrix,
+   -- liftMatrix2, liftMatrix2Auto, fromArray2D,
+
+   -- * Numeric.Container
+   -- constant, linspace,
+   diag,
+   ctrans,
+   -- ** Container class
+   scalar,
+   conj,
+   scale, scaleRecip,
+   addConstant,
    add,
    sub,
-   scale, scaleRecip,
-   equal,
-   cmap,
-   rank,
    mul,
    divide,
+   equal,
    arctan2,
    hconcat,
    vconcat,
    scalar,
+   cmap,
    konst,
-   conj,
-   ctrans,
-   addConstant,
-   diag,
-   diagBlock,
+   -- build, atIndex, minIndex, maxIndex, minElement, maxElement,
+   -- sumElements, prodElements, step, cond, find, assoc, accum,
+   -- Convert
+   -- ** Product class
+   multiply,
+   -- dot, absSum, norm1, norm2, normInf,
+   -- optimiseMult, mXm, mXv, vXm, (<.>),
+   -- (<>), (<\>), outer, kronecker,
+   -- ** Random numbers
+   -- ** Element conversion
+   -- ** Input/Output
+   -- ** Experimental
 
-   -- *** dimension
-   cols, rows,
-   colsNT, rowsNT,
-   -- * AD
+   -- * Numeric.LinearAlgebra.Algorithms
+   -- | incomplete wrapper for "Numeric.LinearAlgebra.Algorithms"
+
+   -- ** Linear Systems
+   -- linearSolve, luSolve, cholSolve, linearSolveLS, linearSolveSVD,
+   inv,
+   -- pinv, pinvtol,
+   det,
+   -- invlndet,
+   rank,
+   -- rcond,
+   -- ** Matrix factorizations
+
+   -- *** Singular value decomposition
+   -- *** Eigensystems
+   -- $eigs
+   wrapEig, wrapEigOnly,
+   EigCxt,
+   -- **** eigenvalues and eigenvectors
+   eig,
+   eigC,
+   eigH,
+   eigH',
+   eigR,
+   eigS,
+   eigS',
+   eigSH,
+   eigSH',
+
+   -- **** eigenvalues
+   eigOnlyC,
+   eigOnlyH,
+   eigOnlyR,
+   eigOnlyS,
+   eigenvalues,
+   eigenvaluesSH,
+   eigenvaluesSH',
+
+   -- *** QR
+   -- *** Cholesky
+   -- *** Hessenberg
+   -- *** Schur
+   -- *** LU 
+
+   -- ** Matrix functions
+   -- sqrtm, matFunc
+   expm,
+
+   -- ** Nullspace
+   -- ** Norms
+   -- ** Misc
+   -- ** Util 
+
+   -- * Automatic Differentiation
+   -- $ad
    diff,
 
    -- * actually internal
@@ -56,9 +150,8 @@ module DimMat.Internal (
    DimMat(..),
    AtEq, MapMul, Inner, InvCxt, SameLengths, Product, MapRecip, ScaleCxt,
    ZipWithZipWithMul, MapMapConst, Len, CanAddConst, PPUnits,
-   PPUnits', Head, MapDiv, AreRecips, ZipWithMul,
-   -- * TODO
-   -- $TODO
+   PPUnits', Head, MapDiv, AreRecips, ZipWithMul, PairsToList,
+   DiagBlock, MapConst, SameLength', AppendShOf,
   ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
@@ -90,18 +183,28 @@ diff f z = Dimensional $ AD.diff (unD . f . Dimensional) (unD z)
     where unD (Dimensional a) = a
 
 
-{-
-grad :: (Num a, AreRecips i iinv, H.Element a, Storable a,
-          MapMultEq o iinv r) =>
-        (forall s. (AD.Mode s, H.Container H.Vector (AD.AD s a),
-                    Storable (AD.AD s a), H.Field (AD.AD s a))
-                => DimMat '[i] (AD.AD s a)
-                -> Quantity o (AD.AD s a))
-     -> DimMat '[i] a
-     -> DimMat '[r] a
-grad f (DimVec x) = DimMat (H.fromLists [AD.grad (unQty . f . DimVec . H.fromList) (H.toList x)])
-    where unQty (Dimensional a) = a
-          -}
+{- $ad
+
+TODO: gradients, hessians, etc.
+
+Types for derivative towers can see hlist's @HList\/Data\/HList\/broken\/Lazy.hs@
+
+Complications include the fact that AD.grad needs a traversable,
+but hmatrix stuff is not traversable (due needing Storable). In ipopt-hs
+I got around this problem by copying data. Perhaps that is the solution?
+
+> BROKEN
+> grad :: (Num a, AreRecips i iinv, H.Element a, Storable a,
+>           MapMultEq o iinv r) =>
+>         (forall s. (AD.Mode s, H.Container H.Vector (AD.AD s a),
+>                     Storable (AD.AD s a), H.Field (AD.AD s a))
+>                 => DimMat '[i] (AD.AD s a)
+>                 -> Quantity o (AD.AD s a))
+>      -> DimMat '[i] a
+>      -> DimMat '[r] a
+> grad f (DimVec x) = DimMat (H.fromLists [AD.grad (unQty . f . DimVec . H.fromList) (H.toList x)])
+>     where unQty (Dimensional a) = a
+-}
 
 
 {- | Matrix with statically checked units (and dimensions). This wraps up
@@ -223,7 +326,7 @@ type instance DimMatFromTuple ijs =
                DOne ': MapDiv (UnDQuantity1 (Fst (Fst ijs)))
                (UnDQuantity (FromPairs (Snd (Fst ijs))))]
 
--- | just for types
+-- | just for types produced by the matD quasiquote
 toDM :: ijs -> DimMatFromTuple ijs t
 toDM = error "toDM"
 
@@ -267,7 +370,7 @@ type family MapRecip (a :: [k]) :: [k]
 type instance MapRecip (a ': as) = Div DOne a ': MapRecip as
 type instance MapRecip '[] = '[]
 
--- | 'length'
+-- | 'length', encoded with 'N.S' and 'N.Z'
 type family Len (a :: [*]) :: *
 type instance Len '[] = N.Z
 type instance Len (a ': as) = N.S (Len as)
@@ -461,6 +564,7 @@ conj :: DimMat sh a -> DimMat sh a
 conj (DimMat a) = DimMat (H.conj a)
 conj (DimVec a) = DimVec (H.conj a)
 
+-- | conjugate transpose
 ctrans :: (one ~ DOne,
          sh  ~ [a11 ': ri, one ': ci],
          sh' ~ [a11 ': ci, one ': ri])
@@ -472,14 +576,18 @@ diag :: (MapConst DOne v ~ c,
         ) => DimMat '[v] t -> DimMat '[v,c] t
 diag (DimVec a) = DimMat (H.diag a)
 
+#if MIN_VERSION_hmatrix(0,15,0)
 -- | 'H.blockDiag'. The blocks should be provided as:
 --
 -- > blockDiag (m1, (m2, (m3, ())))
 --
 -- XXX should we bring in HList for this?
+--
+-- only available if hmatrix >= 0.15
 diagBlock :: (PairsToList t e, db ~ DimMat [ri, DOne ': ci] e,
               Num e, H.Field e, DiagBlock t db)  => t -> db
-diagBlock pairs = undefined
+diagBlock pairs = DimMat (H.diagBlock (pairsToList pairs))
+#endif
 
 class DiagBlock (bs :: *) t
 instance (DiagBlock as as', AppendShOf a as' ~ t) => DiagBlock (a,as) t 
@@ -503,7 +611,19 @@ instance PairsToList () t where
 instance (PairsToList b t, t' ~ t) => PairsToList (DimMat sh t',b) t where
         pairsToList (DimMat a,b) = a : pairsToList b
 
-{- |
+type family EigCxt (sh :: [[*]]) (eigenValue  :: [*]) (eigenVector  :: k) :: Constraint
+
+type instance EigCxt [r,c] eigval [cinv,d] =
+  ( MapConst DOne r ~ d,
+    SameLengths [r,c,cinv,d,eigval],
+    AreRecips c cinv,
+    ZipWithMul r c eigval)
+
+-- | when no eigenvectors are needed
+type instance EigCxt [r,c] eigval '() =
+  ( SameLengths [r,c,eigval], ZipWithMul r c eigval)
+
+{- $eigs
 
 The Hmatrix eig factors A into P and D where A = P D inv(P) and D is diagonal.
 
@@ -535,47 +655,58 @@ expm your eigenvectors (not that that seems to be something people do)?
 To get the row-units of A to match up, sometimes `D` will have units. 
 The equation ends up as D/c = r
 
+Please ignore the type signatures on 'eig' 'eigC' etc. instead look at the type of
+'wrapEig' 'wrapEigOnly' together with the hmatrix documentation (linked).
+
+Perhaps the convenience definitions `eig m = wrapEig H.eig m` should be in
+another module.
 -}
-eig :: ( MapConst DOne r ~ d,
-         SameLengths [r,c,cinv,d,eigval],
-         AreRecips c cinv,
-         ZipWithMul r c eigval,
-         d ~ (DOne ': _2) -- keep the GADT constr happy
-         )
-     => DimMat [r,c] t
-    -> (DimMat '[eigval] (H.Complex Double), DimMat '[cinv,d] (H.Complex Double))
-eig (DimMat a) = case H.eig a of
+
+-- | 'wrapEig' H.'H.eig'
+eig m = wrapEig H.eig m
+-- | 'wrapEig' H.'H.eigC'
+eigC m = wrapEig H.eigC m
+-- | 'wrapEig' H.'H.eigH'
+eigH m = wrapEig H.eigH m
+-- | 'wrapEig' H.'H.eigH''
+eigH' m = wrapEig H.eigH' m
+-- | 'wrapEig' H.'H.eigR'
+eigR m = wrapEig H.eigR m
+-- | 'wrapEig' H.'H.eigS'
+eigS m = wrapEig H.eigS m
+-- | 'wrapEig' H.'H.eigS''
+eigS' m = wrapEig H.eigS' m
+-- | 'wrapEig' H.'H.eigSH'
+eigSH m = wrapEig H.eigSH m
+-- | 'wrapEig' H.'H.eigSH''
+eigSH' m = wrapEig H.eigSH' m
+
+-- | 'wrapEigOnly' H.'H.eigOnlyC'
+eigOnlyC m = wrapEigOnly H.eigOnlyC m
+-- | 'wrapEigOnly' H.'H.eigOnlyH'
+eigOnlyH m = wrapEigOnly H.eigOnlyH m
+-- | 'wrapEigOnly' H.'H.eigOnlyR'
+eigOnlyR m = wrapEigOnly H.eigOnlyR m
+-- | 'wrapEigOnly' H.'H.eigOnlyS'
+eigOnlyS m = wrapEigOnly H.eigOnlyS m
+-- | 'wrapEigOnly' H.'H.eigenvalues'
+eigenvalues m = wrapEigOnly H.eigenvalues m
+-- | 'wrapEigOnly' H.'H.eigenvaluesSH'
+eigenvaluesSH m = wrapEigOnly H.eigenvaluesSH m
+-- | 'wrapEigOnly' H.'H.eigenvaluesSH''
+eigenvaluesSH' m = wrapEigOnly H.eigenvaluesSH' m
+
+wrapEig :: (ones ~ (DOne ': _1), EigCxt [r,c] eigVal [cinv,ones],
+    H.Field y, H.Field z)
+    => (H.Matrix x -> (H.Vector y, H.Matrix z)) ->
+    DimMat [r,c] x ->
+    (DimMat '[eigVal] y, DimMat [cinv,ones] z)
+wrapEig hmatrixFun (DimMat a) = case hmatrixFun a of
     (e,v) -> (DimVec e, DimMat v)
 
-{- $TODO
+wrapEigOnly :: (EigCxt [r,c] eigVal '(), H.Field y)
+    => (H.Matrix x -> H.Vector y) ->
+    DimMat [r,c] x -> DimMat '[eigVal] y
+wrapEigOnly hmatrixFun (DimMat a) = case hmatrixFun a of
+    (e) -> DimVec e
 
->   H.build ::
->     H.IndexOf c
->     -> hmatrix-0.15.2.0:Numeric.ContainerBoot.ArgOf c e -> c e
->   H.atIndex :: c e -> H.IndexOf c -> e
->   H.minIndex :: c e -> H.IndexOf c
->   H.maxIndex :: c e -> H.IndexOf c
->   H.minElement :: c e -> e
->   H.maxElement :: c e -> e
->   H.sumElements :: c e -> e
->   H.prodElements :: c e -> e
->   H.step :: H.RealElement e => c e -> c e
->   H.cond :: H.RealElement e => c e -> c e -> c e -> c e -> c e -> c e
->   H.find :: (e -> Bool) -> c e -> [H.IndexOf c]
->   H.assoc :: H.IndexOf c -> e -> [(H.IndexOf c, e)] -> c e
->   H.accum :: c e -> (e -> e -> e) -> [(H.IndexOf c, e)] -> c 
-
-  Pseudoinverse and related decompositions by LAPACK (SVD, QR etc.)
- 
-  Friendly syntax for introduction (more matD)
-
-  Friendly syntax for elimination (matD as pattern)
-
-  A pretty-printer that includes the types of each entry
-
-  A clean way to get the n x n dimensionless identity matrix
-
-  check that all types that could could be inferred are
-
-  default columns/rows to dimensionless?
--}
