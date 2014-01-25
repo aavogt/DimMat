@@ -87,8 +87,17 @@ data LiSystem dtinv (xs :: [*]) (ys :: [*]) (us :: [*]) e where
         -> DimMat c e -- ^ C
         -> DimMat d e -- ^ D
         -> LiSystem dtinv xs ys us e
+-- need a show instance?
 
--- | usually we are time-invariant
+{- | usually we are time-invariant
+
+ this type doesn't take a parameter for the dimension of the variable
+ that you are integrating over, because it is pretty much always DTime,
+ and it's probably confusing to generalize it?
+
+ also it is called an LTI system (emphasis on the T) and not
+ a linear-and-integration-variable-invariant system
+-}
 type LtiSystem = LiSystem (Div DOne DTime)
 
 type ExampleSystem = LtiSystem
