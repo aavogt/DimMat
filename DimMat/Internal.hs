@@ -451,6 +451,7 @@ addConstant (Dimensional a) (DimMat b) = DimMat (H.addConstant a b)
 
 conj :: DimMat sh a -> DimMat sh a
 conj (DimMat a) = DimMat (H.conj a)
+conj (DimVec a) = DimVec (H.conj a)
 
 ctrans :: (one ~ DOne,
          sh  ~ [a11 ': ri, one ': ci],
