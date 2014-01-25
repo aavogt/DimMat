@@ -71,7 +71,6 @@ module DimMat.Internal (
    arctan2,
    hconcat,
    vconcat,
-   scalar,
    cmap,
    konst,
    -- build, atIndex, minIndex, maxIndex, minElement, maxElement,
@@ -531,10 +530,12 @@ cmap _ f m = error "cmap not implemented"
      will be useful. 
     -}
 
-hconcat :: DimMat [ri,ci1] a -> DimMat [ri,ci2] a -> DimMat [ri, Append ci1 ci2] a
+hconcat :: (AppendEq ci1 ci2 ci3, ci3 ~ (DOne ': _1)) =>
+    DimMat [ri,ci1] a -> DimMat [ri,ci2] a -> DimMat [ri, ci3] a
 hconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a, b]])
 
-vconcat :: DimMat [ri1,ci] a -> DimMat [ri2,ci] a -> DimMat [Append ri1 ri2, ci] a
+vconcat :: AppendEq ri1 ri2 ri3 =>
+    DimMat [ri1,ci] a -> DimMat [ri2,ci] a -> DimMat [ri3, ci] a
 vconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a],[b]])
 
 rank (DimMat a) = H.rank a
@@ -610,6 +611,23 @@ type family Append (a :: [k]) (b :: [k]) :: [k]
 type instance Append (a ': as) b = a ': Append as b
 type instance Append '[] b = b
 
+type family AppendEq' (a :: [k]) (b :: [k]) (ab :: [k]) :: Constraint
+type instance AppendEq' (a ': as) b (a' ': abs) = (a ~ a', AppendEq' as b abs)
+type instance AppendEq' '[] b abs = (b ~ abs)
+
+-- | a bit overkill?
+--  @a ++ b = ab@
+type AppendEq a b ab =
+   (ab ~ Append a b,
+    AppendEq' a b ab,
+    SameLengths [DropPrefix a ab, b],
+    SameLengths [DropPrefix b ab, a])
+
+type family DropPrefix (a :: [k]) (ab :: [k2]) :: [k2]
+type instance DropPrefix (a ': as) (a' ': abs) = DropPrefix as abs
+type instance DropPrefix '[] bs = bs
+
+-- | rework to follow AppendEq?
 type family AppendDims (sh :: [[*]]) (sh' :: [[*]]) :: [[*]]
 type instance AppendDims [a,b] [c,d] = [Append a c, Append b d]
 type instance AppendDims '[a] '[b] = '[Append a b]
