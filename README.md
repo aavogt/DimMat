@@ -1,10 +1,12 @@
 # compile-time checked units for matrices
-`dimensional-tf` works well, but it only works for scalars. Two related generalizations:
+While `dimensional-tf` works well, but it only works for scalars. Two related generalizations are explored in this package:
 
 * automatic differentiation (`ad` package) that knows about units
-* matrices/vectors with units
+* wrap operations provided by HMatrix
 
 also included is a quasiquote (for expressions and patterns). See `examples/qq.hs`
+
+Documentation at http://aavogt.github.io/haddock/DimMat
 
 ## related work
 ### matrix dimensions statically checked
