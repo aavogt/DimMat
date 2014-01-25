@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverlappingInstances #-}
@@ -37,7 +38,9 @@ module DimMat.Internal (
    scalar,
    konst,
    conj,
+#if MIN_VERSION_hmatrix(0,15,0)
    ctrans,
+#endif
    addConstant,
    diag,
    diagBlock,
@@ -451,7 +454,9 @@ addConstant (Dimensional a) (DimMat b) = DimMat (H.addConstant a b)
 
 conj :: DimMat sh a -> DimMat sh a
 conj (DimMat a) = DimMat (H.conj a)
+conj (DimVec a) = DimVec (H.conj a)
 
+-- | conjugate transpose
 ctrans :: (one ~ DOne,
          sh  ~ [a11 ': ri, one ': ci],
          sh' ~ [a11 ': ci, one ': ri])
@@ -463,14 +468,18 @@ diag :: (MapConst DOne v ~ c,
         ) => DimMat '[v] t -> DimMat '[v,c] t
 diag (DimVec a) = DimMat (H.diag a)
 
+#if MIN_VERSION_hmatrix(0,15,0)
 -- | 'H.blockDiag'. The blocks should be provided as:
 --
 -- > blockDiag (m1, (m2, (m3, ())))
 --
 -- XXX should we bring in HList for this?
+--
+-- only available if hmatrix >= 0.15
 diagBlock :: (PairsToList t e, db ~ DimMat [ri, DOne ': ci] e,
               Num e, H.Field e, DiagBlock t db)  => t -> db
-diagBlock pairs = undefined
+diagBlock pairs = DimMat (H.diagBlock (pairsToList pairs))
+#endif
 
 class DiagBlock (bs :: *) t
 instance (DiagBlock as as', AppendShOf a as' ~ t) => DiagBlock (a,as) t 
