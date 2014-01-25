@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -58,31 +60,42 @@ u = [matD| (0 :: Double) *~ newton |]
 xDot = (a `multiply` x) `add` (b `multiply` u)
 y = (c `multiply` x) `add` (d `multiply` u)
 
--- returns the shape of a matrix that, when right-multiplied by a column vector whose dimensions are from, produces a column vector whose dimensions are to
-type family DivideVectors (to :: [*]) (from :: [*]) :: [[*]]
--- TODO: implement this type family
--- does it need to be converted to constraint form for inference reasons?
+{- | data type encoding units required by
+http://en.wikibooks.org/wiki/Control_Systems/State-Space_Equations#State-Space_Equations
 
--- draft at creating a type to wrap all this (and simplify creating the matrices...)
--- need to make type functions to compute these types from the xs, ys, us that determine them
--- this type doesn't take a parameter for the dimension of the variable that you are integrating over, because it is pretty much always DTime, and it's probably confusing to generalize it?
--- also it is called an LTI system (emphasis on the T) and not a linear-and-integration-variable-invariant system
-data ContinuousLtiSystem (xs :: [*]) (ys :: [*]) (us :: [*]) t = LtiSystem 
-                                                                 {
-													               a' :: DimMat (DivideVectors (MapDiv DTime xs) xs) t,
-														           b' :: DimMat (DivideVectors (MapDiv DTime xs) us) t,
-														           c' :: DimMat (DivideVectors ys xs) t,
-														           d' :: DimMat (DivideVectors ys us) t
-													             }
-deriving instance
-    (PPUnits (DivideVectors ys us),
-     PPUnits (DivideVectors ys xs),
-     PPUnits (DivideVectors (MapDiv DTime xs) xs),
-     PPUnits (DivideVectors (MapDiv DTime xs) us),
-     Show t)
-    => Show (ContinuousLtiSystem xs ys us t) 
+To refresh:
 
-type ExampleSystem = ContinuousLtiSystem '[DLength, DVelocity, DOne, DFrequency] '[DLength, DOne] '[DForce] Double
+> dxs/dt = A xs + B us
+> ys = C xs + D us
+
+the units of d/dt are dtinv.
+-}
+data LiSystem dtinv (xs :: [*]) (ys :: [*]) (us :: [*]) e where
+    LiSystem ::
+        (a ~ [dtinv ': ai,DOne ': aj], -- 11 entry needs units of dtinv
+         b ~ [b11   ': bi,DOne ': bj], -- matrices are in the canonical form
+         c ~ [c11   ': ci,DOne ': cj],
+         d ~ [d11   ': di,DOne ': dj],
+         MultiplyCxt a xs dxs, -- Ax ~ dx/dt
+         MultiplyCxt b us dxs, -- Bu ~ dx/dt
+         MultiplyCxt c xs ys,  -- Cx ~ y
+         MultiplyCxt d us ys   -- Du ~ y
+         )
+        => Unit dtinv e -- ^ tends to be (second^neg1)?
+        -> DimMat a e -- ^ A
+        -> DimMat b e -- ^ B
+        -> DimMat c e -- ^ C
+        -> DimMat d e -- ^ D
+        -> LiSystem dtinv xs ys us e
+
+-- | usually we are time-invariant
+type LtiSystem = LiSystem (Div DOne DTime)
+
+type ExampleSystem = LtiSystem
+    [DLength, DVelocity, DOne, DFrequency]
+    [DLength, DOne]
+    '[DForce]
+    Double
 
 pendulum :: ExampleSystem
-pendulum = undefined -- if we put definitions of a, b, c, d here where their types are already determined, we wouldn't need to litter them with so many freaking annotations
+pendulum = LiSystem (second^neg1) a b c d

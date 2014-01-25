@@ -149,6 +149,7 @@ module DimMat.Internal (
    ZipWithZipWithMul, MapMapConst, Len, CanAddConst, PPUnits,
    PPUnits', Head, MapDiv, AreRecips, ZipWithMul, PairsToList,
    DiagBlock, MapConst, SameLength', AppendShOf,
+   MultiplyCxt, MapMultEq,
   ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
@@ -400,11 +401,23 @@ type instance Tail (a ': as) = as
     -> Quantity ty a
 DimMat m @@> (i,j) = Dimensional (m H.@@> (N.toNum i,N.toNum j))
 
+type family MultiplyCxt (sh1 :: [[*]]) (sh2 :: [*]) (sh3 :: [*]) :: Constraint
+type instance MultiplyCxt [ri,ci] rj ri' =
+    ( MapMultEq (Inner ci rj) ri ri',
+      SameLengths [ci,rj],
+      SameLengths [ri, ri'])
+
+{- | does H.'H.mXm' and H.'H.mXv'.
+
+vXm and vXv (called dot) might be supported in the future too
+-}
 multiply :: (H.Product a,
-            sh' ~ [MapMul (Inner ci rj) ri, cj])
-    => DimMat [ri,ci] a -> DimMat [rj,cj] a
-    -> DimMat sh' a
+             sh ~ [_1,_2],
+             MultiplyCxt sh rj ri')
+    => DimMat sh a -> DimMat (rj ': cj) a
+    -> DimMat (ri' ': cj) a
 multiply (DimMat a) (DimMat b) = DimMat (H.multiply a b)
+multiply (DimMat a) (DimVec b) = DimVec (H.mXv a b)
 
 trans :: (one ~ DOne,
          sh  ~ [a11 ': ri, one ': ci],
