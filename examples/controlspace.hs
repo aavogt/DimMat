@@ -4,7 +4,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
@@ -13,7 +12,7 @@
 module T1 where
 import DimMat
 import Numeric.Units.Dimensional.TF.Prelude
--- import Numeric.LinearAlgebra.Algorithms
+import Numeric.Units.Dimensional.TF
 import qualified Prelude as P
 
 
@@ -59,6 +58,15 @@ u = [matD| (0 :: Double) *~ newton |]
 
 xDot = (a `multiply` x) `add` (b `multiply` u)
 y = (c `multiply` x) `add` (d `multiply` u)
+
+isLTI_ = isLTI
+        ((1::Double) *~ second)
+        a b c d
+        x u y
+
+isLTI time a b c d x u y =
+    (scale (_1 /time) x `add` multiply a x `add` multiply b u,
+     y `add` multiply c x `add` multiply d u)
 
 {- | data type encoding units required by
 http://en.wikibooks.org/wiki/Control_Systems/State-Space_Equations#State-Space_Equations
