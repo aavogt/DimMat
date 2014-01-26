@@ -77,6 +77,11 @@ data LiSystem dtinv (xs :: [*]) (ys :: [*]) (us :: [*]) e where
          c ~ [c11   ': ci,DOne ': cj],
          d ~ [d11   ': di,DOne ': dj],
          PPUnits a, PPUnits b, PPUnits c, PPUnits d,
+         PPUnits' bj,
+         SameLengths [ai,aj,bi,cj,Tail xs, Tail dxs],
+         SameLengths [bj,dj,Tail us],
+         SameLengths [ci,di,Tail ys],
+         MapMultEq dtinv xs dxs,
          MultiplyCxt a xs dxs, -- Ax ~ dx/dt
          MultiplyCxt b us dxs, -- Bu ~ dx/dt
          MultiplyCxt c xs ys,  -- Cx ~ y

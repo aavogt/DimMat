@@ -152,6 +152,7 @@ module DimMat.Internal (
    PPUnits', Head, MapDiv, AreRecips, ZipWithMul, PairsToList,
    DiagBlock, MapConst, SameLength', AppendShOf,
    MultiplyCxt, MapMultEq, Trans,
+   Tail,
   ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
