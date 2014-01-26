@@ -15,6 +15,7 @@ import DimMat
 import Numeric.Units.Dimensional.TF.Prelude
 import Numeric.Units.Dimensional.TF
 import qualified Prelude as P
+import Text.PrettyPrint.ANSI.Leijen
 
 
 {- Example from http://ctms.engin.umich.edu/CTMS/index.php?example=InvertedPendulum&section=ControlStateSpace -}
@@ -47,6 +48,17 @@ y = [matD| 1 *~ meter; _0 :: Dimensionless Double  |]
 isLTI time x u y a b c d =
     (scale (_1 /time) x `add` multiply a x `add` multiply b u,
      y `add` multiply c x `add` multiply d u)
+
+testIsLTI =
+  (\ a b c d -> case isLTI (1 *~ second) x u y a b c d of
+   _ -> do
+    print $ vsep
+        [text "A = " </> indent 0 (pretty (konst _0 `asTypeOf` a)),
+         text "B = " </> indent 0 (pretty (konst _1 `asTypeOf` b)),
+         text "C = " </> indent 0 (pretty (konst _2 `asTypeOf` c)),
+         text "D = " </> indent 0 (pretty (konst _3 `asTypeOf` d))]
+    ) undefined undefined undefined undefined
+
 
 {- | data type encoding units required by
 http://en.wikibooks.org/wiki/Control_Systems/State-Space_Equations#State-Space_Equations

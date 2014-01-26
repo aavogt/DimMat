@@ -153,7 +153,8 @@ module DimMat.Internal (
    PPUnits', Head, MapDiv, AreRecips, ZipWithMul, PairsToList,
    DiagBlock, MapConst, SameLength', AppendShOf,
    MultiplyCxt, MapMultEq, Trans,
-   Tail,
+   Tail,MapMultEq', At, AppendEq, MultEq, Append, AppendEq',
+   DropPrefix,
   ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
@@ -226,17 +227,14 @@ data DimMat (sh :: [[*]]) a where
         => H.Vector a -> DimMat '[sh] a
 
 -- very crude
-instance (Show a, PPUnits sh) => Show (DimMat sh a) where
-    showsPrec _ (DimVec v) = case ppUnits (Proxy :: Proxy sh) of
-        [rs] ->
-            displayS $
-            renderPretty 0.1 80 $ vcat
+instance (Show a, PPUnits sh) => Pretty (DimMat sh a) where
+    pretty (DimVec v) = case ppUnits (Proxy :: Proxy sh) of
+        [rs] -> vcat
              [ dullgreen (string label) <+> string (show e)
                 | (e,label) <- H.toList v `zip` pad rs ]
-    showsPrec _ (DimMat m) = case ppUnits (Proxy :: Proxy sh) of
+    pretty (DimMat m) = case ppUnits (Proxy :: Proxy sh) of
         [rs,cs] -> 
-            displayS $
-            renderPretty 0.1 80 $ vcat $
+            vcat $
             map (hsep . onHead dullgreen) $
             transpose $ map (onHead dullgreen . map string . pad) $
             zipWith (\a b -> a:b)
@@ -246,6 +244,9 @@ instance (Show a, PPUnits sh) => Show (DimMat sh a) where
         where
             onHead f (x:xs) = f x : xs
             onHead _ [] = []
+
+instance Pretty (DimMat sh a) => Show (DimMat sh a) where
+    showsPrec p x = showsPrec p (pretty x)
 
 pad :: [String] -> [String]
 pad [] = []
