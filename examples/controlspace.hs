@@ -26,38 +26,17 @@ a23 =  2.6727 *~ (meter * second^neg2)
 a42 = (-0.4545) *~ (second^neg1 * meter^neg1)
 a43 = 31.1818 *~ (second^neg2)
 
--- these hints are needed
-d0 = _0 :: Dimensionless Double
-dt0 = (0 :: Double) *~ (second^neg1)
-dtm0 = (0 :: Double) *~ (second^neg1 * meter^neg1)
-
-a = [matD| dt0, _1, _0, _0;
-           _0, a22, a23, _0;
-           dtm0, _0, _0, _1;
-           _0, a42, a43, _0 |]
-
-b = [matD| (0 :: Double) *~ (second / kilo gram);
-           1.8182 *~ ((kilo gram)^neg1);
-           0.0 *~ (second / (meter * kilo gram));
-           4.5455 *~ (meter * kilo gram)^neg1 |]
-
-c = [matD| _1, (0 :: Double) *~ (second), 0 *~ meter, 0 *~ (meter *second);
-           _0, _0, _1, _0 |]
-
-d = [matD| (0 :: Double) *~ (meter / newton);
-           (0 :: Double) *~ (newton^neg1) |]
-
 -- example state value
 x = [matD| 1.0 *~ meter;
            0.2 *~ (meter / second);
-           d0;
+           _0 :: Dimensionless Double;
            0.1 *~ (second^neg1) |]
 
 -- example control input
 u = [matD| (0 :: Double) *~ newton |]
 
-xDot = (a `multiply` x) `add` (b `multiply` u)
-y = (c `multiply` x) `add` (d `multiply` u)
+--xDot = (a `multiply` x) `add` (b `multiply` u)
+--y = (c `multiply` x) `add` (d `multiply` u)
 
 isLTI_ = isLTI
         ((1::Double) *~ second)
@@ -78,29 +57,17 @@ To refresh:
 
 the units of d/dt are dtinv.
 -}
-data LiSystem dtinv (xs :: [*]) (ys :: [*]) (us :: [*]) e where
-    LiSystem ::
-        (a ~ [dtinv ': ai,DOne ': aj], -- 11 entry needs units of dtinv
-         b ~ [b11   ': bi,DOne ': bj], -- matrices are in the canonical form
-         c ~ [c11   ': ci,DOne ': cj],
-         d ~ [d11   ': di,DOne ': dj],
-         PPUnits a, PPUnits b, PPUnits c, PPUnits d,
-         PPUnits' bj,
-         SameLengths [ai,aj,bi,cj,Tail xs, Tail dxs],
-         SameLengths [bj,dj,Tail us],
-         SameLengths [ci,di,Tail ys],
-         MapMultEq dtinv xs dxs,
-         MultiplyCxt a xs dxs, -- Ax ~ dx/dt
-         MultiplyCxt b us dxs, -- Bu ~ dx/dt
-         MultiplyCxt c xs ys,  -- Cx ~ y
-         MultiplyCxt d us ys   -- Du ~ y
-         )
-        => Unit dtinv e -- ^ tends to be (second^neg1)?
-        -> DimMat a e -- ^ A
-        -> DimMat b e -- ^ B
-        -> DimMat c e -- ^ C
-        -> DimMat d e -- ^ D
-        -> LiSystem dtinv xs ys us e
+
+type family DivideVectors (to :: [*]) (from :: [*]) :: [[*]]
+type instance DivideVectors ts fs = [ MapDiv (Head fs) ts, MapMul (Head fs) (MapRecip fs) ]
+
+data LiSystem (iv :: *) (xs :: [*]) (ys :: [*]) (us :: [*]) e = LiSystem
+                                                                {
+                                                                  a :: DimMat (DivideVectors (MapDiv iv xs) xs) e,
+                                                                  b :: DimMat (DivideVectors (MapDiv iv xs) us) e,
+                                                                  c :: DimMat (DivideVectors ys xs) e,
+                                                                  d :: DimMat (DivideVectors ys us) e
+                                                                }
 -- need a show instance?
 
 {- | usually we are time-invariant
@@ -112,13 +79,26 @@ data LiSystem dtinv (xs :: [*]) (ys :: [*]) (us :: [*]) e where
  also it is called an LTI system (emphasis on the T) and not
  a linear-and-integration-variable-invariant system
 -}
-type LtiSystem = LiSystem (Div DOne DTime)
+type LtiSystem = LiSystem DTime
 
 type ExampleSystem = LtiSystem
-    [DLength, DVelocity, DOne, DFrequency]
-    [DLength, DOne]
+    [DLength, DVelocity, DPlaneAngle, DAngularVelocity]
+    [DLength, DPlaneAngle]
     '[DForce]
     Double
 
 pendulum :: ExampleSystem
-pendulum = LiSystem (second^neg1) a b c d
+pendulum = LiSystem { a = a', b = b', c = c', d = d' }
+         where
+           a' = [matD| _0, _1, _0, _0;
+                       _0, a22, a23, _0;
+                       _0, _0, _0, _1;
+                       _0, a42, a43, _0 |]
+           b' = [matD| _0;
+                       1.8182 *~ ((kilo gram)^neg1);
+                       _0;
+                       4.5455 *~ (meter * kilo gram)^neg1 |]
+           c' = [matD| _1, _0, _0, _0;
+                       _0, _0, _1, _0 |]
+           d' = [matD| _0;
+                       _0 |]
