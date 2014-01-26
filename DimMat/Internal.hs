@@ -406,6 +406,7 @@ type instance Head (a ': as) = a
 type family Tail (a :: [k]) :: [k]
 type instance Tail (a ': as) = as
 
+-- | Data.Packed.Vector.'H.@>'
 (@>) :: (N.NumType i)
     => DimMat '[units] a
     -> i
@@ -570,14 +571,8 @@ hconcat :: (MultEq rem a11 b11,
     DimMat [a11 ': ri1,ci1] a -> DimMat [b11 ': ri2, ci2] a -> DimMat [a11 ': ri1, ci3] a
 hconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a, b]])
 
-vconcat ::
-  (AppendEq aRi (b11 ': bRi') abRi,
-   MultEq rem b11 a11,
-   MapMultEq rem bCi aCi,
-   MapMultEq rem bRi bRi')
-    => DimMat [a11 ': aRi,  DOne ': aCi] a
-    -> DimMat [b11 ': bRi,  DOne ': bCi] a
-    -> DimMat [a11 ': abRi, DOne ': aCi] a
+vconcat :: (AppendEq ri1 ri2 ri3) =>
+    DimMat [ri1,ci1] a -> DimMat [ri2,ci1] a -> DimMat [ri3, ci1] a
 vconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a],[b]])
 
 rank (DimMat a) = H.rank a
