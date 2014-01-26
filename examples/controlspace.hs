@@ -76,6 +76,7 @@ data LiSystem dtinv (xs :: [*]) (ys :: [*]) (us :: [*]) e where
          b ~ [b11   ': bi,DOne ': bj], -- matrices are in the canonical form
          c ~ [c11   ': ci,DOne ': cj],
          d ~ [d11   ': di,DOne ': dj],
+         PPUnits a, PPUnits b, PPUnits c, PPUnits d,
          MultiplyCxt a xs dxs, -- Ax ~ dx/dt
          MultiplyCxt b us dxs, -- Bu ~ dx/dt
          MultiplyCxt c xs ys,  -- Cx ~ y
