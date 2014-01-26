@@ -35,6 +35,7 @@ Haddocks are organized to follow hmatrix
 -}
 module DimMat.Internal (
    -- * Data.Packed.Vector
+   (@>),
    -- * Data.Packed.Matrix
    -- ** dimension
    cols, rows,
@@ -147,7 +148,7 @@ module DimMat.Internal (
    toDM,
    DimMatFromTuple,
    DimMat(..),
-   AtEq, MapMul, Inner, InvCxt, SameLengths, Product, MapRecip, ScaleCxt,
+   AtEq, MapMul, Inner, InvCxt, SameLengths, Product, MapRecip,
    ZipWithZipWithMul, MapMapConst, Len, CanAddConst, PPUnits,
    PPUnits', Head, MapDiv, AreRecips, ZipWithMul, PairsToList,
    DiagBlock, MapConst, SameLength', AppendShOf,
@@ -398,6 +399,12 @@ type instance Head (a ': as) = a
 type family Tail (a :: [k]) :: [k]
 type instance Tail (a ': as) = as
 
+(@>) :: (N.NumType i)
+    => DimMat '[units] a
+    -> i
+    -> Quantity (At units i) a
+DimVec v @> i = Dimensional (v H.@> N.toNum i)
+
 -- | Data.Packed.Matrix.'H.@@>'
 (@@>) :: (N.NumType i, N.NumType j, AtEq ri i ci j ty)
     => DimMat [ri,ci] a
@@ -406,10 +413,11 @@ type instance Tail (a ': as) = as
 DimMat m @@> (i,j) = Dimensional (m H.@@> (N.toNum i,N.toNum j))
 
 type family MultiplyCxt (sh1 :: [[*]]) (sh2 :: [*]) (sh3 :: [*]) :: Constraint
-type instance MultiplyCxt [ri,ci] rj ri' =
-    ( MapMultEq (Inner ci rj) ri ri',
+type instance MultiplyCxt [r11 ': r,ci] rj ri' =
+    ( InnerCxt ci rj,
+      MapMultEq r11 rj ri',
       SameLengths [ci,rj],
-      SameLengths [ri, ri'])
+      SameLengths [r11 ': r, ri'])
 
 {- | does H.'H.mXm' and H.'H.mXv'.
 
@@ -441,10 +449,10 @@ trans :: (Trans sh sh',
     => DimMat sh a -> DimMat sh' a
 trans (DimMat a) = DimMat (H.trans a)
 
-type family AreRecips (a :: [k]) (b :: [k]) :: Constraint
-type instance AreRecips (a ': as) (b ': bs) =
-        (a ~ Div DOne b, b ~ Div DOne a, AreRecips as bs)
+type family AreRecips (a :: k) (b :: k) :: Constraint
+type instance AreRecips (a ': as) (b ': bs) = (AreRecips a b, AreRecips as bs)
 type instance AreRecips '[] '[] = ()
+type instance AreRecips a b = (a ~ Div DOne b, b ~ Div DOne a)
 
 type SameLength a b = (SameLength' a b, SameLength' b a)
 
@@ -476,12 +484,6 @@ det :: (SameLengths [ri,ci]) => DimMat [ri,ci] a
         -> Quantity (Product ri `Mul` Product ci) a
 det (DimMat a) = Dimensional (H.det a)
 
--- | multiplying by a scalar, like 'H.scalar' from hmatrix's 'H.Container' class
-type ScaleCxt time ri ri' =
-    (MapMul time ri ~ ri',
-     MapDiv time ri' ~ ri,
-     Head ri' `Div` Head ri ~ time)
-
 {- | Numeric.LinearAlgebra.Algorithms.'H.expm'
 
 @y t = expm (scale t a) \`multiply\` y0@ solves the DE @y' = Ay@ where y0 is the
@@ -496,13 +498,13 @@ expm (DimMat a) = DimMat (H.expm a)
 {- | Numeric.Container.'H.scale'
 
 -}
-scale :: (ScaleCxt e ri ri')
+scale :: (MapMultEq e ri ri')
     => Quantity e a -> DimMat [ri,ci] a -> DimMat [ri',ci] a
 scale (Dimensional t) (DimMat a) = DimMat (H.scale t a)
 
 {- | Numeric.Container.'H.scaleRecip'
 -}
-scaleRecip :: (ScaleCxt e' ri ri', Div DOne e ~ e', Div DOne e' ~ e)
+scaleRecip :: (MapMultEq e' ri ri', AreRecips e e')
     => Quantity e a -> DimMat [ri,ci] a -> DimMat [ri',ci] a
 scaleRecip (Dimensional t) (DimMat a) = DimMat (H.scale t a)
 
@@ -531,7 +533,7 @@ equal (DimMat a) (DimMat b) = H.equal a b
 -- ideally any transformation of units (say replace all metre by seconds)
 -- that still fits should work. This will involve re-doing the lookups
 -- done in 'matD'
-cmap :: (ScaleCxt deltaE ri ri')
+cmap :: (MapMultEq deltaE ri ri')
     => proxy deltaE
     -> (forall l m t i th n j e. 
         (N.NumType l, N.NumType m, N.NumType t, N.NumType i,
