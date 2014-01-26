@@ -151,7 +151,7 @@ module DimMat.Internal (
    ZipWithZipWithMul, MapMapConst, Len, CanAddConst, PPUnits,
    PPUnits', Head, MapDiv, AreRecips, ZipWithMul, PairsToList,
    DiagBlock, MapConst, SameLength', AppendShOf,
-   MultiplyCxt, MapMultEq,
+   MultiplyCxt, MapMultEq, Trans,
   ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
@@ -422,10 +422,22 @@ multiply :: (H.Product a,
 multiply (DimMat a) (DimMat b) = DimMat (H.multiply a b)
 multiply (DimMat a) (DimVec b) = DimVec (H.mXv a b)
 
-trans :: (one ~ DOne,
-         sh  ~ [a11 ': ri, one ': ci],
-         sh' ~ [a11 ': ci, one ': ri])
-         => DimMat sh a -> DimMat sh' a
+-- | @(Trans sh1 sh2) =>@ asserts that the two matrices are transposes
+type family Trans (sh1 :: [[*]]) (sh2 :: [[*]]) :: Constraint
+type instance Trans [a11 ': ri, one ': ci]
+                    [a11' ': ci', one' ': ri'] =
+    (MapMultEq a11 ri' ri, MapMultEq a11 ci ci',
+     SameLengths [ci, ci'],
+     SameLengths [ri, ri'],
+     one ~ DOne, one' ~ DOne,
+     a11 ~ a11')
+
+trans :: (Trans sh sh',
+          -- need to assert we have valid shapes
+          -- (and at least one row)
+          sh' ~ [_1 ': __1 , DOne ': _2],
+          sh ~ [_3 ': __3, DOne ': _4])
+    => DimMat sh a -> DimMat sh' a
 trans (DimMat a) = DimMat (H.trans a)
 
 type family AreRecips (a :: [k]) (b :: [k]) :: Constraint
@@ -539,16 +551,23 @@ read the constraints here is:
 > map (*rem) (a11 : ri) = b11 : bi
 > ci3 = ci1 ++ map (*rem) ci2
 
+The same idea happens with vconcat.
 -}
-hconcat :: (MultEq a11 rem b11,
+hconcat :: (MultEq rem a11 b11,
+            MapMultEq rem ri1 ri2,
             MapMultEq rem ci2 ci2',
-            MapMultEq rem ri bi,
             AppendEq ci1 ci2' ci3) =>
-    DimMat [a11 ': ri,ci1] a -> DimMat [b11 ': bi, ci2] a -> DimMat [a11 ': ri, ci3] a
+    DimMat [a11 ': ri1,ci1] a -> DimMat [b11 ': ri2, ci2] a -> DimMat [a11 ': ri1, ci3] a
 hconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a, b]])
 
-vconcat :: AppendEq ri1 ri2 ri3 =>
-    DimMat [ri1,ci] a -> DimMat [ri2,ci] a -> DimMat [ri3, ci] a
+vconcat ::
+  (AppendEq aRi (b11 ': bRi') abRi,
+   MultEq rem b11 a11,
+   MapMultEq rem bCi aCi,
+   MapMultEq rem bRi bRi')
+    => DimMat [a11 ': aRi,  DOne ': aCi] a
+    -> DimMat [b11 ': bRi,  DOne ': bCi] a
+    -> DimMat [a11 ': abRi, DOne ': aCi] a
 vconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a],[b]])
 
 rank (DimMat a) = H.rank a
@@ -592,11 +611,7 @@ conj (DimMat a) = DimMat (H.conj a)
 conj (DimVec a) = DimVec (H.conj a)
 
 -- | conjugate transpose
-ctrans :: (one ~ DOne,
-         sh  ~ [a11 ': ri, one ': ci],
-         sh' ~ [a11 ': ci, one ': ri])
-         => DimMat sh a -> DimMat sh' a
-ctrans = conj . trans
+ctrans x = conj . trans $ x
 
 diag :: (MapConst DOne v ~ c,
         c ~ (DOne ': _1)
