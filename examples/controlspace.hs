@@ -27,38 +27,17 @@ a23 =  2.6727 *~ (meter * second^neg2)
 a42 = (-0.4545) *~ (second^neg1 * meter^neg1)
 a43 = 31.1818 *~ (second^neg2)
 
--- these hints are needed
-d0 = _0 :: Dimensionless Double
-dt0 = (0 :: Double) *~ (second^neg1)
-dtm0 = (0 :: Double) *~ (second^neg1 * meter^neg1)
-
-a = [matD| dt0, _1, _0, _0;
-           _0, a22, a23, _0;
-           dtm0, _0, _0, _1;
-           _0, a42, a43, _0 |]
-
-b = [matD| (0 :: Double) *~ (second / kilo gram);
-           1.8182 *~ ((kilo gram)^neg1);
-           0.0 *~ (second / (meter * kilo gram));
-           4.5455 *~ (meter * kilo gram)^neg1 |]
-
-c = [matD| _1, (0 :: Double) *~ (second), 0 *~ meter, 0 *~ (meter *second);
-           _0, _0, _1, _0 |]
-
-d = [matD| (0 :: Double) *~ (meter / newton);
-           (0 :: Double) *~ (newton^neg1) |]
-
 -- example state value
 x = [matD| 1.0 *~ meter;
            0.2 *~ (meter / second);
-           d0;
+           _0 :: Dimensionless Double;
            0.1 *~ (second^neg1) |]
 
 -- example control input
 u = [matD| (0 :: Double) *~ newton |]
 
-xDot = (a `multiply` x) `add` (b `multiply` u)
-y = (c `multiply` x) `add` (d `multiply` u)
+--xDot = (a `multiply` x) `add` (b `multiply` u)
+--y = (c `multiply` x) `add` (d `multiply` u)
 
 {- | data type encoding units required by
 http://en.wikibooks.org/wiki/Control_Systems/State-Space_Equations#State-Space_Equations
@@ -77,11 +56,6 @@ data LiSystem dtinv (xs :: [*]) (ys :: [*]) (us :: [*]) e where
          c ~ [c11   ': ci,DOne ': cj],
          d ~ [d11   ': di,DOne ': dj],
          PPUnits a, PPUnits b, PPUnits c, PPUnits d,
-         PPUnits' bj,
-         SameLengths [ai,aj,bi,cj,Tail xs, Tail dxs],
-         SameLengths [bj,dj,Tail us],
-         SameLengths [ci,di,Tail ys],
-         MapMultEq dtinv xs dxs,
          MultiplyCxt a xs dxs, -- Ax ~ dx/dt
          MultiplyCxt b us dxs, -- Bu ~ dx/dt
          MultiplyCxt c xs ys,  -- Cx ~ y
@@ -114,3 +88,16 @@ type ExampleSystem = LtiSystem
 
 pendulum :: ExampleSystem
 pendulum = LiSystem (second^neg1) a b c d
+           where
+             a = [matD| _0, _1, _0, _0;
+                        _0, a22, a23, _0;
+                        _0, _0, _0, _1;
+                        _0, a42, a43, _0 |]
+             b = [matD| (0 :: Double) *~ (second / kilo gram);
+                        1.8182 *~ ((kilo gram)^neg1);
+                        0.0 *~ (second / (meter * kilo gram));
+                        4.5455 *~ (meter * kilo gram)^neg1 |]
+             c = [matD| _1, (0 :: Double) *~ (second), 0 *~ meter, 0 *~ (meter *second);
+                        _0, _0, _1, _0 |]
+             d = [matD| (0 :: Double) *~ (meter / newton);
+                        (0 :: Double) *~ (newton^neg1) |]
