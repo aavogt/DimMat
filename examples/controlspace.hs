@@ -33,6 +33,8 @@ x = [matD| 1.0 *~ meter;
            _0 :: Dimensionless Double;
            0.1 *~ (second^neg1) |]
 
+dx = scale (_1 / (1 *~ second)) x
+
 -- example control input
 u = [matD| (0 :: Double) *~ newton |]
 
@@ -40,7 +42,9 @@ u = [matD| (0 :: Double) *~ newton |]
 
 y = [matD| 1 *~ meter; _0 :: Dimensionless Double  |]
 
-isLTI time a b c d x u y =
+-- :t isLTI (1 *~ second) x u y, given that x u and y have monomorphic
+-- types properly infers constraints on the a,b,c,d arguments!
+isLTI time x u y a b c d =
     (scale (_1 /time) x `add` multiply a x `add` multiply b u,
      y `add` multiply c x `add` multiply d u)
 

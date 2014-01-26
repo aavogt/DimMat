@@ -332,21 +332,28 @@ type instance DimMatFromTuple ijs =
 toDM :: ijs -> DimMatFromTuple ijs t
 toDM = error "toDM"
 
+-- | @Inner a b = 'H.dot' a b@
 type family Inner (a :: [k]) (b :: [k]) :: k
 type instance Inner (a ': as) (b ': bs) = Mul a b
 type instance Inner '[] '[] = '[]
 
-type family InnerCxt (a :: [k]) (b :: [k]) :: Constraint
-type instance InnerCxt (a ': b ': c) (x ': y ': z) = (Mul a x ~ Mul b y, InnerCxt (b ': c) (y ': z))
-type instance InnerCxt '[a] '[b] = ()
-type instance InnerCxt '[] '[] = ()
--- and anything else is an error
+-- | @InnerCxt t a b = t ~ 'H.dot' a b@
+type family InnerCxt (t :: k) (a :: [k]) (b :: [k]) :: Constraint
+type instance InnerCxt t (a ': c) (x ': z) = (MultEq a x t, InnerCxt t c z)
+type instance InnerCxt t '[] '[] = ()
 
+-- | MapMul a xs = map (a*) xs
 type family MapMul (a :: k) (xs :: [k]) :: [k]
 type instance MapMul a '[] = '[]
 type instance MapMul a (x ': xs) = Mul a x ': MapMul a xs
 
+-- | MapMulEq a xs ys = map (a*) xs ~ ys
+--
+-- should work in any direction (given xs and ys, solve a),
+-- unlike 'MapMul' that goes forwards only
 type MapMultEq a xs ys = (SameLengths [xs,ys], MapMultEq' a xs ys)
+
+-- | helper for 'MapMultEq'
 type family MapMultEq' (a :: k) (xs :: [k]) (ys :: [k]) :: Constraint
 type instance MapMultEq' a (x ': xs) (y ': ys) = (MultEq a x y, MapMultEq' a xs ys)
 type instance MapMultEq' a '[] '[] = ()
@@ -414,7 +421,7 @@ DimMat m @@> (i,j) = Dimensional (m H.@@> (N.toNum i,N.toNum j))
 
 type family MultiplyCxt (sh1 :: [[*]]) (sh2 :: [*]) (sh3 :: [*]) :: Constraint
 type instance MultiplyCxt [r11 ': r,ci] rj ri' =
-    ( InnerCxt ci rj,
+    ( InnerCxt (Inner ci rj) ci rj,
       MapMultEq (Inner ci rj) (r11 ': r) ri',
       SameLengths [ci,rj],
       SameLengths [r11 ': r, ri'])
