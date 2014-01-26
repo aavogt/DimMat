@@ -22,10 +22,22 @@ import qualified Prelude as P
 -- not really stated on that page, but if you go back a couple of pages in their derivation
 -- you can see that the type of u is a 1x1 matrix whose sole element is a force
 
-a22 = (-0.1818 :: Double) *~ (second^neg1)
-a23 =  2.6727 *~ (meter * second^neg2)
-a42 = (-0.4545) *~ (second^neg1 * meter^neg1)
-a43 = 31.1818 *~ (second^neg2)
+massOfCart = (0.5 :: Double) *~ (kilo gram)
+massOfPendulum = (0.2 :: Double) *~ (kilo gram)
+coefficientOfFrictionForCart = (0.1 :: Double) *~ (newton / (meter / second))
+lengthToPendulumCenterOfMass = (0.3 :: Double) *~ meter
+massMomentOfInertiaOfPendulum = (0.006 :: Double) *~ (kilo gram * meter^pos2)
+g = (9.8 :: Double) *~ (meter / second^pos2)
+
+p = massMomentOfInertiaOfPendulum*(massOfCart+massOfPendulum)+(massOfCart*massOfPendulum*lengthToPendulumCenterOfMass*lengthToPendulumCenterOfMass)
+
+a22 = negate (massMomentOfInertiaOfPendulum+massOfPendulum * lengthToPendulumCenterOfMass * lengthToPendulumCenterOfMass) * coefficientOfFrictionForCart / p
+a23 = (massOfPendulum * massOfPendulum * g * lengthToPendulumCenterOfMass * lengthToPendulumCenterOfMass) / p
+a42 = negate (massOfPendulum * lengthToPendulumCenterOfMass * coefficientOfFrictionForCart) / p
+a43 = massOfPendulum * g * lengthToPendulumCenterOfMass*(massOfCart + massOfPendulum)/p
+
+b21 = (massMomentOfInertiaOfPendulum + (massOfPendulum * lengthToPendulumCenterOfMass * lengthToPendulumCenterOfMass)) / p
+b41 = massOfPendulum * lengthToPendulumCenterOfMass / p
 
 -- example state value
 x = [matD| 1.0 *~ meter;
@@ -99,9 +111,9 @@ pendulum = LiSystem { a = a', b = b', c = c', d = d' }
                        _0, _0, _0, _1;
                        _0, a42, a43, _0 |]
            b' = [matD| _0;
-                       1.8182 *~ ((kilo gram)^neg1);
+                       b21;
                        _0;
-                       4.5455 *~ (meter * kilo gram)^neg1 |]
+                       b41 |]
            c' = [matD| _1, _0, _0, _0;
                        _0, _0, _1, _0 |]
            d' = [matD| _0;
