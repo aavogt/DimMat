@@ -1,3 +1,4 @@
+{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -36,12 +37,6 @@ x = [matD| 1.0 *~ meter;
 u = [matD| (0 :: Double) *~ newton |]
 
 --xDot = (a `multiply` x) `add` (b `multiply` u)
---y = (c `multiply` x) `add` (d `multiply` u)
-
-isLTI_ = isLTI
-        ((1::Double) *~ second)
-        a b c d
-        x u y
 
 isLTI time a b c d x u y =
     (scale (_1 /time) x `add` multiply a x `add` multiply b u,
@@ -68,6 +63,13 @@ data LiSystem (iv :: *) (xs :: [*]) (ys :: [*]) (us :: [*]) e = LiSystem
                                                                   c :: DimMat (DivideVectors ys xs) e,
                                                                   d :: DimMat (DivideVectors ys us) e
                                                                 }
+deriving instance
+    (PPUnits (DivideVectors (MapDiv iv xs) xs),
+     PPUnits (DivideVectors (MapDiv iv xs) us),
+     PPUnits (DivideVectors ys xs),
+     PPUnits (DivideVectors ys us),
+     Show e)
+    => Show (LiSystem iv xs ys us e)
 -- need a show instance?
 
 {- | usually we are time-invariant
