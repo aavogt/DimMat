@@ -38,6 +38,8 @@ u = [matD| (0 :: Double) *~ newton |]
 
 --xDot = (a `multiply` x) `add` (b `multiply` u)
 
+y = [matD| 1 *~ meter; _0 :: Dimensionless Double  |]
+
 isLTI time a b c d x u y =
     (scale (_1 /time) x `add` multiply a x `add` multiply b u,
      y `add` multiply c x `add` multiply d u)
@@ -104,3 +106,9 @@ pendulum = LiSystem { a = a', b = b', c = c', d = d' }
                        _0, _0, _1, _0 |]
            d' = [matD| _0;
                        _0 |]
+
+poles x = eigenvalues . a $ x
+
+evaluate sys x u = let xDot = ((a sys) `multiply` x) `add` ((b sys) `multiply` u)
+                       y = ((c sys) `multiply` x) `add` ((d sys) `multiply` u)
+    in (xDot, y)

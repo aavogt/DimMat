@@ -415,7 +415,7 @@ DimMat m @@> (i,j) = Dimensional (m H.@@> (N.toNum i,N.toNum j))
 type family MultiplyCxt (sh1 :: [[*]]) (sh2 :: [*]) (sh3 :: [*]) :: Constraint
 type instance MultiplyCxt [r11 ': r,ci] rj ri' =
     ( InnerCxt ci rj,
-      MapMultEq r11 rj ri',
+      MapMultEq (Inner ci rj) (r11 ': r) ri',
       SameLengths [ci,rj],
       SameLengths [r11 ': r, ri'])
 
@@ -424,7 +424,7 @@ type instance MultiplyCxt [r11 ': r,ci] rj ri' =
 vXm and vXv (called dot) might be supported in the future too
 -}
 multiply :: (H.Product a,
-             sh ~ [_1,_2],
+             sh ~ [ _1 ': __1 ,DOne ': __2 ],
              MultiplyCxt sh rj ri')
     => DimMat sh a -> DimMat (rj ': cj) a
     -> DimMat (ri' ': cj) a
