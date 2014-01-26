@@ -153,7 +153,8 @@ module DimMat.Internal (
    PPUnits', Head, MapDiv, AreRecips, ZipWithMul, PairsToList,
    DiagBlock, MapConst, SameLength', AppendShOf,
    MultiplyCxt, MapMultEq, Trans,
-   Tail,
+   Tail,MapMultEq', At, AppendEq, MultEq, Append, AppendEq',
+   DropPrefix,
   ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
@@ -226,17 +227,14 @@ data DimMat (sh :: [[*]]) a where
         => H.Vector a -> DimMat '[sh] a
 
 -- very crude
-instance (Show a, PPUnits sh) => Show (DimMat sh a) where
-    showsPrec _ (DimVec v) = case ppUnits (Proxy :: Proxy sh) of
-        [rs] ->
-            displayS $
-            renderPretty 0.1 80 $ vcat
+instance (Show a, PPUnits sh) => Pretty (DimMat sh a) where
+    pretty (DimVec v) = case ppUnits (Proxy :: Proxy sh) of
+        [rs] -> vcat
              [ dullgreen (string label) <+> string (show e)
                 | (e,label) <- H.toList v `zip` pad rs ]
-    showsPrec _ (DimMat m) = case ppUnits (Proxy :: Proxy sh) of
+    pretty (DimMat m) = case ppUnits (Proxy :: Proxy sh) of
         [rs,cs] -> 
-            displayS $
-            renderPretty 0.1 80 $ vcat $
+            vcat $
             map (hsep . onHead dullgreen) $
             transpose $ map (onHead dullgreen . map string . pad) $
             zipWith (\a b -> a:b)
@@ -246,6 +244,9 @@ instance (Show a, PPUnits sh) => Show (DimMat sh a) where
         where
             onHead f (x:xs) = f x : xs
             onHead _ [] = []
+
+instance Pretty (DimMat sh a) => Show (DimMat sh a) where
+    showsPrec p x = showsPrec p (pretty x)
 
 pad :: [String] -> [String]
 pad [] = []
@@ -332,21 +333,28 @@ type instance DimMatFromTuple ijs =
 toDM :: ijs -> DimMatFromTuple ijs t
 toDM = error "toDM"
 
+-- | @Inner a b = 'H.dot' a b@
 type family Inner (a :: [k]) (b :: [k]) :: k
 type instance Inner (a ': as) (b ': bs) = Mul a b
 type instance Inner '[] '[] = '[]
 
-type family InnerCxt (a :: [k]) (b :: [k]) :: Constraint
-type instance InnerCxt (a ': b ': c) (x ': y ': z) = (Mul a x ~ Mul b y, InnerCxt (b ': c) (y ': z))
-type instance InnerCxt '[a] '[b] = ()
-type instance InnerCxt '[] '[] = ()
--- and anything else is an error
+-- | @InnerCxt t a b = t ~ 'H.dot' a b@
+type family InnerCxt (t :: k) (a :: [k]) (b :: [k]) :: Constraint
+type instance InnerCxt t (a ': c) (x ': z) = (MultEq a x t, InnerCxt t c z)
+type instance InnerCxt t '[] '[] = ()
 
+-- | MapMul a xs = map (a*) xs
 type family MapMul (a :: k) (xs :: [k]) :: [k]
 type instance MapMul a '[] = '[]
 type instance MapMul a (x ': xs) = Mul a x ': MapMul a xs
 
+-- | MapMulEq a xs ys = map (a*) xs ~ ys
+--
+-- should work in any direction (given xs and ys, solve a),
+-- unlike 'MapMul' that goes forwards only
 type MapMultEq a xs ys = (SameLengths [xs,ys], MapMultEq' a xs ys)
+
+-- | helper for 'MapMultEq'
 type family MapMultEq' (a :: k) (xs :: [k]) (ys :: [k]) :: Constraint
 type instance MapMultEq' a (x ': xs) (y ': ys) = (MultEq a x y, MapMultEq' a xs ys)
 type instance MapMultEq' a '[] '[] = ()
@@ -399,6 +407,7 @@ type instance Head (a ': as) = a
 type family Tail (a :: [k]) :: [k]
 type instance Tail (a ': as) = as
 
+-- | Data.Packed.Vector.'H.@>'
 (@>) :: (N.NumType i)
     => DimMat '[units] a
     -> i
@@ -414,7 +423,7 @@ DimMat m @@> (i,j) = Dimensional (m H.@@> (N.toNum i,N.toNum j))
 
 type family MultiplyCxt (sh1 :: [[*]]) (sh2 :: [*]) (sh3 :: [*]) :: Constraint
 type instance MultiplyCxt [r11 ': r,ci] rj ri' =
-    ( InnerCxt ci rj,
+    ( InnerCxt (Inner ci rj) ci rj,
       MapMultEq (Inner ci rj) (r11 ': r) ri',
       SameLengths [ci,rj],
       SameLengths [r11 ': r, ri'])
@@ -563,14 +572,8 @@ hconcat :: (MultEq rem a11 b11,
     DimMat [a11 ': ri1,ci1] a -> DimMat [b11 ': ri2, ci2] a -> DimMat [a11 ': ri1, ci3] a
 hconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a, b]])
 
-vconcat ::
-  (AppendEq aRi (b11 ': bRi') abRi,
-   MultEq rem b11 a11,
-   MapMultEq rem bCi aCi,
-   MapMultEq rem bRi bRi')
-    => DimMat [a11 ': aRi,  DOne ': aCi] a
-    -> DimMat [b11 ': bRi,  DOne ': bCi] a
-    -> DimMat [a11 ': abRi, DOne ': aCi] a
+vconcat :: (AppendEq ri1 ri2 ri3) =>
+    DimMat [ri1,ci1] a -> DimMat [ri2,ci1] a -> DimMat [ri3, ci1] a
 vconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a],[b]])
 
 rank (DimMat a) = H.rank a

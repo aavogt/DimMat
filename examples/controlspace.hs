@@ -15,6 +15,7 @@ import DimMat
 import Numeric.Units.Dimensional.TF.Prelude
 import Numeric.Units.Dimensional.TF
 import qualified Prelude as P
+import Text.PrettyPrint.ANSI.Leijen
 
 
 {- Example from http://ctms.engin.umich.edu/CTMS/index.php?example=InvertedPendulum&section=ControlStateSpace -}
@@ -45,6 +46,8 @@ x = [matD| 1.0 *~ meter;
            _0 :: Dimensionless Double;
            0.1 *~ (second^neg1) |]
 
+dx = scale (_1 / (1 *~ second)) x
+
 -- example control input
 u = [matD| (0 :: Double) *~ newton |]
 
@@ -52,9 +55,22 @@ u = [matD| (0 :: Double) *~ newton |]
 
 y = [matD| 1 *~ meter; _0 :: Dimensionless Double  |]
 
-isLTI time a b c d x u y =
+-- :t isLTI (1 *~ second) x u y, given that x u and y have monomorphic
+-- types properly infers constraints on the a,b,c,d arguments!
+isLTI time x u y a b c d =
     (scale (_1 /time) x `add` multiply a x `add` multiply b u,
      y `add` multiply c x `add` multiply d u)
+
+testIsLTI =
+  (\ a b c d -> case isLTI (1 *~ second) x u y a b c d of
+   _ -> do
+    print $ vsep
+        [text "A = " </> indent 0 (pretty (konst _0 `asTypeOf` a)),
+         text "B = " </> indent 0 (pretty (konst _1 `asTypeOf` b)),
+         text "C = " </> indent 0 (pretty (konst _2 `asTypeOf` c)),
+         text "D = " </> indent 0 (pretty (konst _3 `asTypeOf` d))]
+    ) undefined undefined undefined undefined
+
 
 {- | data type encoding units required by
 http://en.wikibooks.org/wiki/Control_Systems/State-Space_Equations#State-Space_Equations
