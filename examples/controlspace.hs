@@ -1,3 +1,7 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeOperators #-}
@@ -11,12 +15,15 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 module T1 where
+import GHC.Exts (Constraint)
 import DimMat
 import Numeric.Units.Dimensional.TF.Prelude
 import Numeric.Units.Dimensional.TF
 import qualified Prelude as P
 import Text.PrettyPrint.ANSI.Leijen
 
+
+import qualified Numeric.LinearAlgebra as H
 
 {- Example from http://ctms.engin.umich.edu/CTMS/index.php?example=InvertedPendulum&section=ControlStateSpace -}
 
@@ -68,47 +75,35 @@ To refresh:
 > dxs/dt = A xs + B us
 > ys = C xs + D us
 
-the units of d/dt are dtinv.
+the units of d/dt are 1/iv 
 -}
+class LiSystem (iv :: *) (xs :: [*]) (ys :: [*]) (us :: [*])
+            (a :: [[*]]) (b :: [[*]]) (c :: [[*]]) (d :: [[*]])
+instance 
+   (MultiplyCxt a xs dxs,
+    MultiplyCxt b us dxs,
+    MultiplyCxt c xs ys,
+    MultiplyCxt d us ys,
+    MapMultEq iv dxs xs)
+    => LiSystem iv xs ys us a b c d
 
-type family DivideVectors (to :: [*]) (from :: [*]) :: [[*]]
-type instance DivideVectors ts fs = [ MapDiv (Head fs) ts, MapMul (Head fs) (MapRecip fs) ]
+-- | identity function but constrains types
+isLiTuple :: 
+    (LiSystem iv xs ys us a b c d,
+    t ~ (DimMat a e, DimMat b e, DimMat c e, DimMat d e)) =>
+    t -> t
+isLiTuple x = x
 
-data LiSystem (iv :: *) (xs :: [*]) (ys :: [*]) (us :: [*]) e = LiSystem
-                                                                {
-                                                                  a :: DimMat (DivideVectors (MapDiv iv xs) xs) e,
-                                                                  b :: DimMat (DivideVectors (MapDiv iv xs) us) e,
-                                                                  c :: DimMat (DivideVectors ys xs) e,
-                                                                  d :: DimMat (DivideVectors ys us) e
-                                                                }
-deriving instance
-    (PPUnits (DivideVectors (MapDiv iv xs) xs),
-     PPUnits (DivideVectors (MapDiv iv xs) us),
-     PPUnits (DivideVectors ys xs),
-     PPUnits (DivideVectors ys us),
-     Show e)
-    => Show (LiSystem iv xs ys us e)
--- need a show instance?
+isExample :: 
+     (LiSystem DTime
+        [DLength, DVelocity, DPlaneAngle, DAngularVelocity]
+        [DLength, DPlaneAngle]
+        '[DForce]
+        a b c d, t ~ (DimMat a e, DimMat b e, DimMat c e, DimMat d e)) => 
+    t -> t
+isExample x = x
 
-{- | usually we are time-invariant
-
- this type doesn't take a parameter for the dimension of the variable
- that you are integrating over, because it is pretty much always DTime,
- and it's probably confusing to generalize it?
-
- also it is called an LTI system (emphasis on the T) and not
- a linear-and-integration-variable-invariant system
--}
-type LtiSystem = LiSystem DTime
-
-type ExampleSystem = LtiSystem
-    [DLength, DVelocity, DPlaneAngle, DAngularVelocity]
-    [DLength, DPlaneAngle]
-    '[DForce]
-    Double
-
-pendulum :: ExampleSystem
-pendulum = LiSystem { a = a', b = b', c = c', d = d' }
+pendulum = isExample (a',b',c',d')
          where
            a' = [matD| _0, _1, _0, _0;
                        _0, a22, a23, _0;
@@ -123,8 +118,26 @@ pendulum = LiSystem { a = a', b = b', c = c', d = d' }
            d' = [matD| _0;
                        _0 |]
 
-poles x = eigenvalues . a $ x
+poles (a,_,_,_) = eigenvalues a
 
-evaluate sys x u = let xDot = ((a sys) `multiply` x) `add` ((b sys) `multiply` u)
-                       y = ((c sys) `multiply` x) `add` ((d sys) `multiply` u)
-    in (xDot, y)
+evaluate ::
+    ( -- require all matrices to be at least 1x1
+      -- really ought to be part of the MultiplyCxt
+     a ~ [_1 ': _2, DOne ': _3],
+     b ~ [_4 ': _5, DOne ': _6],
+     c ~ [_7 ': _8, DOne ': _9],
+     d ~ [_a ': _b, DOne ': _c],
+
+     H.Field e,
+
+     MultiplyCxt a xs dxs,
+     MultiplyCxt b us dxs,
+     MultiplyCxt c xs ys,
+     MultiplyCxt d us ys) =>
+    (DimMat a e, DimMat b e, DimMat c e, DimMat d e)
+    -> DimMat '[xs, '[DOne]] e
+    -> DimMat '[us, '[DOne]] e
+    -> (DimMat '[dxs, '[DOne]] e, DimMat '[ys, '[DOne]] e)
+evaluate (a,b,c,d) x u = case (a `multiply` x) `add` (b `multiply` u) of
+    xDot -> case (c `multiply` x) `add` (d `multiply` u) of
+     y -> (xDot, y)

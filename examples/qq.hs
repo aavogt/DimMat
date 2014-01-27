@@ -63,5 +63,8 @@ kg s 0.0 0.0     1.0 1.0     0.0 0.0
 m kg 0.0 0.0     0.0 0.0     1.0 1.0
 kg s 0.0 0.0     0.0 0.0     1.0 1.0
 
+>>> toHLists z
+H[H[1.0 m kg, 1.0 m s, 0.0 m kg, 0.0 m s, 0.0 m kg, 0.0 m s], H[1.0 kg s, 1.0 s^2, 0.0 kg s, 0.0 s^2, 0.0 kg s, 0.0 s^2], H[0.0 m kg, 0.0 m s, 1.0 m kg, 1.0 m s, 0.0 m kg, 0.0 m s], H[0.0 kg s, 0.0 s^2, 1.0 kg s, 1.0 s^2, 0.0 kg s, 0.0 s^2], H[0.0 m kg, 0.0 m s, 0.0 m kg, 0.0 m s, 1.0 m kg, 1.0 m s], H[0.0 kg s, 0.0 s^2, 0.0 kg s, 0.0 s^2, 1.0 kg s, 1.0 s^2]]
+
 -}
-z = diagBlock (xs,(xs,(xs, ())))
+z = diagBlock $ hBuild xs xs xs
