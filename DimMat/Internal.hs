@@ -18,20 +18,23 @@
 {- | an incomplete extension of dimensional-tf to work with hmatrix and ad
 Haddocks are organized to follow hmatrix
 
-  Friendly syntax for introduction (more matD)
+note: for subscripting, use the 'HNat' while the units still use 'N.NumType'
 
-  Friendly syntax for elimination (matD as pattern)
+TODO:
 
-  A pretty-printer that multiplies out the dimensions at each place?
-  The current show instance
+*  Friendly syntax for introduction (more matD)
 
-  A clean way to get the n x n dimensionless identity matrix
+*  Friendly syntax for elimination (matD as pattern)
 
-  check that all types that could could be inferred are
+*  A pretty-printer that multiplies out the dimensions at each place?
+   The current show instance makes you mentally multiply out row and column units
+   (which helps you to see the big picture, but may be more work in other cases)
 
-  default columns/rows to dimensionless?
+*  check that all types that could could be inferred are
 
-  missing operations (check export list comments)
+*  default columns/rows to dimensionless?
+
+*  missing operations (check export list comments)
 -}
 module DimMat.Internal (
    -- * Data.Packed.Vector
@@ -40,11 +43,13 @@ module DimMat.Internal (
    -- ** dimension
    cols, rows,
    colsNT, rowsNT,
+   hasRows, hasCols,
    -- (><),
    trans,
    -- reshape, flatten, fromLists, toLists, buildMatrix,
    toHLists, toHList,
    (@@>),
+
    -- asRow, asColumn, fromRows, toRows, fromColumns, toColumns
    -- fromBlocks
 #if MIN_VERSION_hmatrix(0,15,0)
@@ -56,6 +61,7 @@ module DimMat.Internal (
    -- mapMatrixWithIndexM, mapMatrixWithIndexM_, liftMatrix,
    -- liftMatrix2, liftMatrix2Auto, fromArray2D,
 
+   ident, -- where to put this?
    -- * Numeric.Container
    -- constant, linspace,
    diag,
@@ -571,10 +577,23 @@ rowsNT _ = proxy
 colsNT :: DimMat [ri,ci] a -> Proxy (HLength ci)
 colsNT _ = proxy
 
+-- | (m `hasRows` n) constrains the matrix/vector @m@ to have @n@ rows
+hasRows :: (HReplicate n DOne, SameLengths [HReplicateR n DOne, ri], -- forwards
+            HLength ri ~ n -- backwards
+    ) => DimMat (ri ': _1) a -> Proxy (n :: HNat) -> DimMat (ri ': _1) a
+hasRows x _ = x
+
+-- | (m `hasRows` n) constrains the matrix/vector @m@ to have @n@ rows
+hasCols :: (HReplicate n DOne, SameLengths [HReplicateR n DOne, ci], -- forwards
+            HLength ci ~ n -- backwards
+    ) => DimMat [ri, ci] a -> Proxy (n :: HNat) -> DimMat [ri,ci] a
+hasCols x _ = x
+
 scalar :: (H.Field a,
           sh ~ ['[u], '[DOne]]) => Quantity u a -> DimMat sh a
 scalar (Dimensional a) = DimMat (H.scalar a)
 
+-- | Numeric.Container.'H.konst', but the size is determined by the type.
 konst :: forall sh u us ones a _1. (H.Field a,
                               HNat2Integral (HLength ones),
                               HNat2Integral (HLength us),
@@ -583,6 +602,12 @@ konst :: forall sh u us ones a _1. (H.Field a,
 konst (Dimensional a) = DimMat (H.konst a
     (hNat2Integral (proxy :: Proxy (HLength us)),
      hNat2Integral (proxy :: Proxy (HLength ones))))
+
+-- | identity matrix. The size is determined by the type.
+ident :: forall ones a _1.
+    (H.Field a, HNat2Integral (HLength ones), ones ~ (DOne ': _1)) =>
+    DimMat [ones, ones] a
+ident = DimMat (H.ident (hNat2Integral (proxy :: Proxy (HLength ones))))
 
 type family CanAddConst (a :: k) (m :: [[k]]) :: Constraint
 type instance CanAddConst a [as, ones] = (AllEq a as, AllEq DOne ones)
