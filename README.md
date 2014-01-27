@@ -1,18 +1,27 @@
 # compile-time checked units for matrices
-While `dimensional-tf` works well, it only works for scalars. Two related generalizations are explored in this package:
+Two related generalizations of `dimensional-tf` are explored in this package:
 
+* provide hmatrix operations that know about units too
 * automatic differentiation (`ad` package) that knows about units
-* wrap operations provided by HMatrix so they know about units too
 
-also included is a quasiquote (for expressions and patterns). See `examples/qq.hs`
+This comes at a cost, since type errors become more complicated, and type signatures
+for functions that operate on the involved quantities are more difficult (see
+`examples/controlspace.hs`). In return, you get a stronger assurance that your
+program does the right thing.
 
-Documentation at http://aavogt.github.io/haddock/DimMat
+Haddocks are available at http://aavogt.github.io/haddock/DimMat
 
 ## related work
+* http://www.haskell.org/haskellwiki/Physical_units
+
 ### matrix dimensions statically checked
-http://hackage.haskell.org/package/vector-static
+These packages provide operations where the typechecker will prevent invalid operations, such as multiplying an m×n matrix with a p×q matrix when n /= p, at compile-time.
 
-http://hackage.haskell.org/package/Vec
+* http://hackage.haskell.org/package/vector-static
+* http://hackage.haskell.org/package/linear
+* http://hackage.haskell.org/package/Vec
+* [vector-space](http://hackage.haskell.org/package/vector-space) has limited operations on tuples (up to 4 elements)
+* [tensor](http://hackage.haskell.org/package/tensor) has the number of indices at type level, but the range over which index varies is checked at runtime
 
-### other
-HList
+### the record connection
+[extensible records](http://www.haskell.org/haskellwiki/Extensible_record) have many needs in common with DimMat. Types in HMatrix like `fromBlocks :: [[Matrix t]] -> Matrix t` are (or will be) generalized to use [HList](http://hackage.haskell.org/package/HList) instead of ordinary lists (`[]`).
