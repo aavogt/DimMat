@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 -- | a variation on <http://hackage.haskell.org/package/hmatrix-syntax>,
 -- which constructs a matrix which has dimensions stored.
@@ -11,6 +12,8 @@ import Numeric.NumType.TF (zero, incr)
 import Language.Haskell.TH as TH
 import Language.Haskell.TH.Quote as TH
 import Language.Haskell.TH.Syntax as TH
+
+import Data.HList.CommonMain (hZero,hSucc)
 
 import DimMat.Internal
 import Data.Packed.Vector(
@@ -103,8 +106,8 @@ buildMatST es = let r = length es
   ]
 
 mkNat :: Int -> ExpQ
-mkNat 0 = [| zero |]
-mkNat n = [| incr $(mkNat (n-1)) |]
+mkNat 0 = [| hZero |]
+mkNat n = [| hSucc $(mkNat (n-1)) |]
 
 promotedListT :: [Q Type] -> Q Type
 promotedListT = foldr (\a b -> [t| $promotedConsT $a $b|]) promotedNilT
