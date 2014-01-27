@@ -79,13 +79,15 @@ the units of d/dt are 1/iv
 -}
 class LiSystem (iv :: *) (xs :: [*]) (ys :: [*]) (us :: [*])
             (a :: [[*]]) (b :: [[*]]) (c :: [[*]]) (d :: [[*]])
-instance 
+instance LiSystemCxt dxs iv xs ys us a b c d
+    => LiSystem iv xs ys us a b c d
+
+type LiSystemCxt dxs iv xs ys us a b c d =
    (MultiplyCxt a xs dxs,
     MultiplyCxt b us dxs,
     MultiplyCxt c xs ys,
     MultiplyCxt d us ys,
     MapMultEq iv dxs xs)
-    => LiSystem iv xs ys us a b c d
 
 -- | identity function but constrains types
 isLiTuple :: 
@@ -127,13 +129,8 @@ evaluate ::
      b ~ [_4 ': _5, DOne ': _6],
      c ~ [_7 ': _8, DOne ': _9],
      d ~ [_a ': _b, DOne ': _c],
-
      H.Field e,
-
-     MultiplyCxt a xs dxs,
-     MultiplyCxt b us dxs,
-     MultiplyCxt c xs ys,
-     MultiplyCxt d us ys) =>
+     LiSystemCxt dxs iv xs ys us a b c d) =>
     (DimMat a e, DimMat b e, DimMat c e, DimMat d e)
     -> DimMat '[xs, '[DOne]] e
     -> DimMat '[us, '[DOne]] e
