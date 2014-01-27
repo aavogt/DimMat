@@ -132,9 +132,9 @@ evaluate ::
      H.Field e,
      LiSystemCxt dxs iv xs ys us a b c d) =>
     (DimMat a e, DimMat b e, DimMat c e, DimMat d e)
-    -> DimMat '[xs, '[DOne]] e
-    -> DimMat '[us, '[DOne]] e
-    -> (DimMat '[dxs, '[DOne]] e, DimMat '[ys, '[DOne]] e)
+    -> DimMat [xs, '[DOne]] e
+    -> DimMat [us, '[DOne]] e
+    -> (DimMat [dxs, '[DOne]] e, DimMat [ys, '[DOne]] e)
 evaluate (a,b,c,d) x u = case (a `multiply` x) `add` (b `multiply` u) of
     xDot -> case (c `multiply` x) `add` (d `multiply` u) of
      y -> (xDot, y)
