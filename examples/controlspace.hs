@@ -44,6 +44,23 @@ a23 = (massOfPendulum * massOfPendulum * g * lengthToPendulumCenterOfMass * leng
 a42 = negate (massOfPendulum * lengthToPendulumCenterOfMass * coefficientOfFrictionForCart) / p
 a43 = massOfPendulum * g * lengthToPendulumCenterOfMass*(massOfCart + massOfPendulum)/p
 
+{-
+
+>>> inv aSmall `sub` aInvSmall
+2><2     1                      m                     
+s        -8.881784197001252e-16 -2.220446049250313e-16
+m^-1 s^2 0.0                    0.0
+
+>>> inv aSmall `multiply` aSmall
+2><2   1                     m s^-1                
+1      1.0                   -6.732461810265988e-15
+m^-1 s 5.014435047745458e-19 0.9999999999999999 
+
+-}
+aSmall = [matD| a22, a23; a42, a43 |]
+aInvSmall = scale (_1 / det aSmall)
+    [matD| a43, negate a23; negate a42, a22 |]
+
 b21 = (massMomentOfInertiaOfPendulum + (massOfPendulum * lengthToPendulumCenterOfMass * lengthToPendulumCenterOfMass)) / p
 b41 = massOfPendulum * lengthToPendulumCenterOfMass / p
 
