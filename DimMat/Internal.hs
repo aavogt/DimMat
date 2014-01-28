@@ -596,11 +596,22 @@ scalar :: (H.Field a,
           sh ~ ['[u], '[DOne]]) => Quantity u a -> DimMat sh a
 scalar (Dimensional a) = DimMat (H.scalar a)
 
--- | Numeric.Container.'H.konst', but the size is determined by the type.
-konst :: forall sh u us ones a _1. (H.Field a,
-                              HNat2Integral (HLength ones),
-                              HNat2Integral (HLength us),
-                              ones ~ (DOne ': _1))
+{- | Numeric.Container.'H.konst', but the size is determined by the type.
+
+>>> let n = hSucc (hSucc hZero) -- 2
+>>> konst ((1::Double) *~ second) `hasRows` n `hasCols` n
+2><2 1   1  
+s    1.0 1.0
+s    1.0 1.0
+
+-}
+konst :: forall u us ones a _1.
+    (H.Field a,
+     HNat2Integral (HLength ones),
+     HNat2Integral (HLength us),
+     ones ~ (DOne ': _1),
+     AllEq DOne _1,
+     AllEq u us)
     => Quantity u a -> DimMat [us, ones] a
 konst (Dimensional a) = DimMat (H.konst a
     (hNat2Integral (proxy :: Proxy (HLength us)),
@@ -613,12 +624,14 @@ ident :: forall ones a _1.
 ident = DimMat (H.ident (hNat2Integral (proxy :: Proxy (HLength ones))))
 
 -- | zero matrix. The size and dimension is determined by the type.
-zeroes :: forall sh us ones a _1. (H.Field a,
-                              HNat2Integral (HLength ones),
-                              HNat2Integral (HLength us),
-                              ones ~ (DOne ': _1))
-    => DimMat [us, ones] a
-zeroes = konst _0
+zeroes :: forall r c a _1. (H.Field a,
+                              HNat2Integral (HLength r),
+                              HNat2Integral (HLength c),
+                              c ~ (DOne ': _1))
+    => DimMat [r, c] a
+zeroes = DimMat (H.konst 0
+        (hNat2Integral (proxy :: Proxy (HLength r)),
+         hNat2Integral (proxy :: Proxy (HLength c))))
 
 type family CanAddConst (a :: k) (m :: [[k]]) :: Constraint
 type instance CanAddConst a [as, ones] = (AllEq a as, AllEq DOne ones)
