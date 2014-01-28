@@ -122,6 +122,9 @@ pendulum = isExample (a',b',c',d')
 
 poles (a,_,_,_) = eigenvalues a
 
+-- causes no problems for AV
+evaluatePendulum = evaluate pendulum
+
 evaluate ::
     ( -- require all matrices to be at least 1x1
       -- really ought to be part of the MultiplyCxt
