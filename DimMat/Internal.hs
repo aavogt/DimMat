@@ -101,7 +101,7 @@ module DimMat.Internal (
    -- ** Linear Systems
    -- linearSolve, luSolve, cholSolve, linearSolveLS, linearSolveSVD,
    inv,
-   pinv, 
+   PInv(pinv), 
    pinvTol,
    det,
    -- invlndet,
@@ -165,6 +165,9 @@ module DimMat.Internal (
    Tail,MapMultEq', AppendEq, MultEq, Append, AppendEq',
    DropPrefix,
    RmDimensional(RmDimensional),
+   AreRecips',ToHLists,ToHList,UnDimMat,AllEq,
+   HListFromList,AddDimensional,ToHListRows',
+   ToHListRow,AddQty,
   ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
