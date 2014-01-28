@@ -164,6 +164,7 @@ module DimMat.Internal (
    MultiplyCxt, MapMultEq, Trans,
    Tail,MapMultEq', AppendEq, MultEq, Append, AppendEq',
    DropPrefix,
+   RmDimensional(RmDimensional),
   ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
@@ -714,12 +715,12 @@ toHList (DimVec v) = case hListFromList (H.toList v) :: HList e1 of
 
 fromHList :: forall e ri list.
     (H.Field e,
-     HMapOut (RmDimensional e) list e, ToHListRow ri e list)
+     HMapOut RmDimensional list e, ToHListRow ri e list)
     => HList list -> DimMat '[ri] e
-fromHList xs = DimVec (H.fromList (hMapOut (RmDimensional :: RmDimensional e) xs))
+fromHList xs = DimVec (H.fromList (hMapOut RmDimensional xs))
 
-data RmDimensional e = RmDimensional
-instance (x ~ Quantity d e, y ~ e) => ApplyAB (RmDimensional e) x y where
+data RmDimensional = RmDimensional
+instance (x ~ Quantity d y) => ApplyAB RmDimensional x y where
         applyAB _ (Dimensional a) = a
 
 toHLists :: forall e e1 e2 ci ri result.  (ToHLists e e1 e2 ri ci result)
