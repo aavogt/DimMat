@@ -102,9 +102,7 @@ module DimMat.Internal (
    -- linearSolve, luSolve, cholSolve, linearSolveLS, linearSolveSVD,
    inv,
    pinv, 
-#if MIN_VERSION_hmatrix(0,15,0)
    pinvTol,
-#endif
    det,
    -- invlndet,
    rank,
@@ -159,7 +157,7 @@ module DimMat.Internal (
    toDM,
    DimMatFromTuple,
    DimMat(..),
-   AtEq, MapMul, Inner, InvCxt, SameLengths, Product, MapRecip,
+   AtEq, MapMul, Inner, SameLengths, Product, MapRecip,
    ZipWithZipWithMul, MapMapConst, CanAddConst, PPUnits,
    PPUnits', Head, MapDiv, AreRecips, ZipWithMul, PairsToList,
    DiagBlock, MapConst, SameLength', AppendShOf,
@@ -473,15 +471,8 @@ type instance SameLengths '[b] = ()
 type instance SameLengths '[] = ()
 
 
-type family InvCxt (sh :: [[*]]) (sh' :: [[*]]) :: Constraint
-       
-type instance InvCxt
-    [a11 ': ri, dOne ': ci]
-    [a11' ': ri', dOne' ': ci'] =
-        (SameLengths [ri,ci,ri',ci'], AreRecips ri ci', AreRecips ci ri',
-        dOne ~ DOne, dOne' ~ DOne, a11 ~ Div DOne a11', a11' ~ Div DOne a11)
-
-inv :: (InvCxt sh sh', sh' ~ [ri2 ': _1 , DOne ': ci2]) => DimMat sh a -> DimMat sh' a
+inv :: (PInvCxt sh sh', sh' ~ [_1 ': r , DOne ': c], SameLengths [r,c])
+    => DimMat sh a -> DimMat sh' a
 inv (DimMat a) = DimMat (H.inv a)
 
 type family PInvCxt (sh :: [[*]]) (sh' :: [[*]]) :: Constraint
@@ -495,11 +486,13 @@ type instance PInvCxt
 pinv :: (PInvCxt sh sh', sh' ~ [ri2 ': _1 , DOne ': ci2]) => DimMat sh a -> DimMat sh' a
 pinv (DimMat a) = DimMat (H.pinv a)
 
+pinvTol :: (PInvCxt sh sh',
 #if MIN_VERSION_hmatrix(0,15,0)
 -- on hmatrix 13, the pinvTol function has type Double -> Matrix Double -> MatrixDouble, later they generalized to Field t => Double -> Matrix t -> Matrix t
-pinvTol :: (PInvCxt sh sh', sh' ~ [ri2 ': _1 , DOne ': ci2]) => Double -> DimMat sh a -> DimMat sh' a
-pinvTol tol (DimMat a) = DimMat (H.pinvTol tol a)
+            e ~ Double,
 #endif
+           sh' ~ [ri2 ': _1 , DOne ': ci2]) => Double -> DimMat sh a -> DimMat sh' a
+pinvTol tol (DimMat a) = DimMat (H.pinvTol tol a)
 
 det :: (SameLengths [ri,ci]) => DimMat [ri,ci] a
         -> Quantity (Product ri `Mul` Product ci) a
