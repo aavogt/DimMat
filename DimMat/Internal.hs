@@ -167,7 +167,7 @@ module DimMat.Internal (
    Tail,MapMultEq', AppendEq, MultEq, Append, AppendEq',
    DropPrefix,
    RmDimensional(RmDimensional),
-   AreRecips',ToHList,UnDimMat,AllEq,
+   AreRecipsList,ToHList,UnDimMat,AllEq,
    HListFromList,AddDimensional,ToHListRows',
    ToHListRow,AddQty,
    HMapOutWith(..),
@@ -462,15 +462,30 @@ trans :: (Trans sh sh',
     => DimMat sh a -> DimMat sh' a
 trans (DimMat a) = DimMat (H.trans a)
 
-type AreRecips a b = (SameLength' a b, AreRecips' a b)
 
-type family AreRecips' (a :: k) (b :: k) :: Constraint
-type instance AreRecips' (a ': as) (b ': bs) = (AreRecips' a b, AreRecips' as bs)
-type instance AreRecips' '[] '[] = ()
-type instance AreRecips' a b = (a ~ Div DOne b, b ~ Div DOne a)
+{- | @AreRecips a b@ asserts one of these things, depending on the kind
+involved
 
+> Mul a b ~ DOne
+> zipWith Mul a b ~ [DOne, DOne, DOne, ...]
+> zipWith (zipWith Mul) a b ~ [ [DOne, DOne, ...], [DOne, DOne, ... ] ]
+
+-}
+type family AreRecips (a :: k) (b :: k) :: Constraint
+type instance AreRecips (a :: *) (b :: *) = (MultEq a b DOne)
+type instance AreRecips (a :: [k]) (b :: [k]) = (SameLength' a b, AreRecipsList a b)
+
+-- | use AreRecips instead (unless you want to unnecessarily constrain the
+-- type. Putting this instance separately is an \"optimization\", since
+-- we don't want/need to assert two lists have the 'SameLength'' at every
+-- recursive call
+type family AreRecipsList (a :: [k]) (b :: [k]) :: Constraint
+type instance AreRecipsList (a ': as) (b ': bs) = (AreRecips a b, AreRecipsList as bs)
+type instance AreRecipsList '[] '[] = ()
+
+-- | arguably HList should export this one, and have the class 'SameLength'
+-- renamed as SameLength'
 type SameLength' a b = (SameLength a b, SameLength b a)
-
 
 -- | if any [k] in the list's length is known, then all other [k] lists in the outer list
 -- will be forced to have the same length
