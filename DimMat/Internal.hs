@@ -81,6 +81,7 @@ module DimMat.Internal (
    vconcat,
    cmap,
    konst,
+   zeroes,
    -- build, atIndex, minIndex, maxIndex, minElement, maxElement,
    -- sumElements, prodElements, step, cond, find, assoc, accum,
    -- Convert
@@ -608,6 +609,14 @@ ident :: forall ones a _1.
     (H.Field a, HNat2Integral (HLength ones), ones ~ (DOne ': _1)) =>
     DimMat [ones, ones] a
 ident = DimMat (H.ident (hNat2Integral (proxy :: Proxy (HLength ones))))
+
+-- | zero matrix. The size and dimension is determined by the type.
+zeroes :: forall sh us ones a _1. (H.Field a,
+                              HNat2Integral (HLength ones),
+                              HNat2Integral (HLength us),
+                              ones ~ (DOne ': _1))
+    => DimMat [us, ones] a
+zeroes = konst _0
 
 type family CanAddConst (a :: k) (m :: [[k]]) :: Constraint
 type instance CanAddConst a [as, ones] = (AllEq a as, AllEq DOne ones)

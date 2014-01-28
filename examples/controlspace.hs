@@ -129,8 +129,7 @@ pendulum = isExample (a',b',c',d')
                        b41 |]
            c' = [matD| _1, _0, _0, _0;
                        _0, _0, _1, _0 |]
-           d' = [matD| _0;
-                       _0 |]
+           d' = zeroes
 
 poles (a,_,_,_) = eigenvalues a
 
