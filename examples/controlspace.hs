@@ -61,6 +61,24 @@ aSmall = [matD| a22, a23; a42, a43 |]
 aInvSmall = scale (_1 / det aSmall)
     [matD| a43, negate a23; negate a42, a22 |]
 
+{-
+>>> cmap (Scale' ((2::Double) *~ second)) aSmall
+2><2 1                    m s^-1            
+1    -0.36363636363636365 5.3454545454545475
+m^-1 -0.9090909090909091  62.36363636363637
+
+alternative to scale. Also more fancy examples (say swap metres and seconds
+powers)...
+
+-}
+newtype Scale' f a = Scale' (Quantity f a)
+instance (Num a, a ~ Double,
+          x ~ Quantity d a,
+          y ~ Quantity d' a,
+          MultEq f d d')
+        => ApplyAB (Scale' f a) x y where
+  applyAB (Scale' n) x = n * x
+
 b21 = (massMomentOfInertiaOfPendulum + (massOfPendulum * lengthToPendulumCenterOfMass * lengthToPendulumCenterOfMass)) / p
 b41 = massOfPendulum * lengthToPendulumCenterOfMass / p
 

@@ -47,8 +47,8 @@ module DimMat.Internal (
    -- (><),
    trans,
    -- reshape, flatten, fromLists, toLists, buildMatrix,
-   toHLists, toHList,
-   fromHLists, fromHList,
+   ToHLists(toHLists), toHList,
+   FromHLists(fromHLists), fromHList,
    (@@>),
 
    -- asRow, asColumn, fromRows, toRows, fromColumns, toColumns
@@ -166,7 +166,7 @@ module DimMat.Internal (
    Tail,MapMultEq', AppendEq, MultEq, Append, AppendEq',
    DropPrefix,
    RmDimensional(RmDimensional),
-   AreRecips',ToHLists,ToHList,UnDimMat,AllEq,
+   AreRecips',ToHList,UnDimMat,AllEq,
    HListFromList,AddDimensional,ToHListRows',
    ToHListRow,AddQty,
    HMapOutWith(..),
@@ -570,13 +570,21 @@ arctan2 (DimMat a) (DimMat b) = DimMat (H.arctan2 a b)
 equal :: (m ~ DimMat [ri,ci] a) => m -> m -> Bool
 equal (DimMat a) (DimMat b) = H.equal a b
 
--- how to nicely defunctionalize? See Fun' Fun in HList?
--- ideally any transformation of units (say replace all metre by seconds)
--- that still fits should work. This will involve re-doing the lookups
--- done in 'matD'
-cmap f = error "cmap not implemented yet"
-    -- fromHLists . hMap (HMap f) . toHLists
-    -- needs some type-signature work to avoid ambiguous type error
+{- | @cmap f m@ gives a matrix @m'@
+
+@f@ is applied to 
+
+-}
+class CMap f sh sh' e e' where
+    cmap :: f -> DimMat sh e -> DimMat sh' e'
+instance 
+    (ToHLists sh e xs,
+     FromHLists sh' e' xs',
+     SameLengths [xs,xs'],
+     HMapAux (HMap f) xs xs') =>
+    CMap f sh sh' e e' where
+  cmap f m = fromHLists (HMap f `hMap` (toHLists m :: HList xs) :: HList xs')
+    -- maybe there's a way to implement in terms of the real cmap
 
 {- | the slightly involved type here exists because
 ci1 and ci2 both start with DOne, but ci2's contribution
@@ -719,20 +727,28 @@ data RmDimensional = RmDimensional
 instance (x ~ Quantity d y) => ApplyAB RmDimensional x y where
         applyAB _ (Dimensional a) = a
 
-fromHLists ::
-        (ToHLists e e1 e2 ri ci result,
+class H.Field e => FromHLists sh e xs where
+    fromHLists :: HList xs -> DimMat sh e
+
+instance 
+        (ToHListRows' ri ci e result,
          HMapOut (HMapOutWith RmDimensional) result [e],
-         ci ~ (DOne ': _1), H.Field e)
-    => HList result -> DimMat [ri,ci] e
-fromHLists xs = DimMat (H.fromLists (hMapOut (HMapOutWith RmDimensional) xs))
+         SameLengths [ri, result],
+         (HList resultHead ': _2) ~ result,
+         SameLengths [ci, resultHead],
+         ci ~ (DOne ': _1), H.Field e,
+         sh ~ [ri,ci]) =>
+    FromHLists sh e result where
+    fromHLists xs = DimMat (H.fromLists (hMapOut (HMapOutWith RmDimensional) xs))
 
 newtype HMapOutWith f = HMapOutWith f
 instance (HMapOut f l e, es ~ [e], HList l ~ hl) => ApplyAB (HMapOutWith f) hl es where
     applyAB (HMapOutWith f) = hMapOut f
 
-toHLists :: forall e e1 e2 ci ri result.  (ToHLists e e1 e2 ri ci result)
-    => DimMat [ri,ci] e -> HList result 
-toHLists (DimMat m) = case hListFromList (map hListFromList (H.toLists m) :: [HList e1]) :: HList e2 of
+class ToHLists sh e xs where
+    toHLists :: DimMat sh e -> HList xs
+instance (ToHListsCxt e e1 e2 ri ci xs) => ToHLists [ri,ci] e xs where
+  toHLists (DimMat m) = case hListFromList (map hListFromList (H.toLists m) :: [HList e1]) :: HList e2 of
     e2 -> hMap (HMap AddDimensional) e2
 
 type ToHList e e1 ri result =
@@ -745,7 +761,7 @@ type family ToHListRow (a :: [*]) e (b :: [*]) :: Constraint
 type instance ToHListRow (a ': as) e (b ': bs) = (Quantity a e ~ b, ToHListRow as e bs)
 
 -- | performance (compile-time) is pretty bad
-type ToHLists e e1 e2 ri ci result =
+type ToHListsCxt e e1 e2 ri ci result =
     (HListFromList e e1,
      HListFromList (HList e1) e2,
      SameLengths [ci,e1], SameLengths [e2,result,ri],
