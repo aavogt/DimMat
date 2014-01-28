@@ -509,9 +509,9 @@ instance
     pinv (DimMat a) = DimMat (H.pinv a)
 
 pinvTol :: (PInv sh sh',
-#if MIN_VERSION_hmatrix(0,15,0)
+#if !MIN_VERSION_hmatrix(0,15,0)
 -- on hmatrix 13, the pinvTol function has type Double -> Matrix Double -> MatrixDouble, later they generalized to Field t => Double -> Matrix t -> Matrix t
-            e ~ Double,
+            a ~ Double,
 #endif
            sh' ~ [ri2 ': _1 , DOne ': ci2]) => Double -> DimMat sh a -> DimMat sh' a
 pinvTol tol (DimMat a) = DimMat (H.pinvTol tol a)
