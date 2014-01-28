@@ -455,10 +455,12 @@ trans :: (Trans sh sh',
     => DimMat sh a -> DimMat sh' a
 trans (DimMat a) = DimMat (H.trans a)
 
-type family AreRecips (a :: k) (b :: k) :: Constraint
-type instance AreRecips (a ': as) (b ': bs) = (AreRecips a b, AreRecips as bs)
-type instance AreRecips '[] '[] = ()
-type instance AreRecips a b = (a ~ Div DOne b, b ~ Div DOne a)
+type AreRecips a b = (SameLength' a b, AreRecips' a b)
+
+type family AreRecips' (a :: k) (b :: k) :: Constraint
+type instance AreRecips' (a ': as) (b ': bs) = (AreRecips' a b, AreRecips' as bs)
+type instance AreRecips' '[] '[] = ()
+type instance AreRecips' a b = (a ~ Div DOne b, b ~ Div DOne a)
 
 type SameLength' a b = (SameLength a b, SameLength b a)
 
@@ -471,22 +473,41 @@ type instance SameLengths '[b] = ()
 type instance SameLengths '[] = ()
 
 
-inv :: (PInvCxt sh sh', sh' ~ [_1 ': r , DOne ': c], SameLengths [r,c])
+inv :: (PInv sh sh', sh' ~ [_1 ': r , DOne ': c], SameLengths [r,c])
     => DimMat sh a -> DimMat sh' a
 inv (DimMat a) = DimMat (H.inv a)
 
-type family PInvCxt (sh :: [[*]]) (sh' :: [[*]]) :: Constraint
+{- | type for a pseudoinverse (and inverse):
+
+The single instance comes from looking at inverses from a 2x2 matrix (let's call A):
+
+> a b
+> c d
+
+and the inverse * determinant of the original
+
+>  d  -b
+> -c   a
+
+In the product A * A^-1 the diagonal is dimensionless ('DOne').
+
+That happens if the row and column type-level unit lists are reciprocals of
+eachother ('AreRecips'), so the constraint on the instance of PInv encodes
+this exactly (plus some constraints requiring that sh and sh' are at least
+1x1)
+-}
+class PInv (sh :: [[*]]) (sh' :: [[*]]) where
+        pinv :: DimMat sh a -> DimMat sh' a
        
-type instance PInvCxt
-    [a11 ': ri, dOne ': ci]
-    [a11' ': ri', dOne' ': ci'] =
-        (SameLengths [ri,ci'], SameLengths [ci,ri'], AreRecips ri ci', AreRecips ci ri',
-        dOne ~ DOne, dOne' ~ DOne, a11 ~ Div DOne a11', a11' ~ Div DOne a11)
+instance 
+  (sh ~  [_1 ': _2, DOne ': _3],
+   sh' ~ [r', c'], c' ~ (DOne ': _4),
+   MultiplyCxt sh r' c'inv,
+   AreRecips c'inv c') =>
+   PInv sh sh' where
+    pinv (DimMat a) = DimMat (H.pinv a)
 
-pinv :: (PInvCxt sh sh', sh' ~ [ri2 ': _1 , DOne ': ci2]) => DimMat sh a -> DimMat sh' a
-pinv (DimMat a) = DimMat (H.pinv a)
-
-pinvTol :: (PInvCxt sh sh',
+pinvTol :: (PInv sh sh',
 #if MIN_VERSION_hmatrix(0,15,0)
 -- on hmatrix 13, the pinvTol function has type Double -> Matrix Double -> MatrixDouble, later they generalized to Field t => Double -> Matrix t -> Matrix t
             e ~ Double,
@@ -637,10 +658,11 @@ ident :: forall ones a _1.
 ident = DimMat (H.ident (hNat2Integral (proxy :: Proxy (HLength ones))))
 
 -- | zero matrix. The size and dimension is determined by the type.
-zeroes :: forall r c a _1. (H.Field a,
+zeroes :: forall r c a _1 _2 _3. (H.Field a,
                               HNat2Integral (HLength r),
                               HNat2Integral (HLength c),
-                              c ~ (DOne ': _1))
+                              c ~ (DOne ': _1),
+                              r ~ (_2 ': _3))
     => DimMat [r, c] a
 zeroes = DimMat (H.konst 0
         (hNat2Integral (proxy :: Proxy (HLength r)),
