@@ -572,9 +572,11 @@ rank (DimMat a) = H.rank a
 rows (DimMat a) = H.rows a
 cols (DimMat a) = H.cols a
 
-rowsNT :: DimMat [ri,ci] a -> Proxy (HLength ri)
+-- | H.'H.rows' except type-level
+rowsNT :: DimMat (ri ': ci) a -> Proxy (HLength ri)
 rowsNT _ = proxy
 
+-- | H.'H.cols' except type-level
 colsNT :: DimMat [ri,ci] a -> Proxy (HLength ci)
 colsNT _ = proxy
 
@@ -620,6 +622,7 @@ zeroes = konst _0
 
 type family CanAddConst (a :: k) (m :: [[k]]) :: Constraint
 type instance CanAddConst a [as, ones] = (AllEq a as, AllEq DOne ones)
+type instance CanAddConst a '[as] = (AllEq a as)
 
 type family AllEq (a :: k) (xs :: [k]) :: Constraint
 type instance AllEq a (x ': xs) = (a ~ x, AllEq a xs)
@@ -630,6 +633,7 @@ addConstant :: (H.Field a, CanAddConst u sh)
     -> DimMat sh a
     -> DimMat sh a
 addConstant (Dimensional a) (DimMat b) = DimMat (H.addConstant a b)
+addConstant (Dimensional a) (DimVec b) = DimVec (H.addConstant a b)
 
 conj :: DimMat sh a -> DimMat sh a
 conj (DimMat a) = DimMat (H.conj a)
@@ -659,6 +663,16 @@ toHList :: forall e e1 ri result.  (ToHList e e1 ri result)
     => DimMat '[ri] e -> HList result 
 toHList (DimVec v) = case hListFromList (H.toList v) :: HList e1 of
     e1 -> hMap AddDimensional e1
+
+fromHList :: forall e ri list.
+    (H.Field e,
+     HMapOut (RmDimensional e) list e, ToHListRow ri e list)
+    => HList list -> DimMat '[ri] e
+fromHList xs = DimVec (H.fromList (hMapOut (RmDimensional :: RmDimensional e) xs))
+
+data RmDimensional e = RmDimensional
+instance (x ~ Quantity d e, y ~ e) => ApplyAB (RmDimensional e) x y where
+        applyAB _ (Dimensional a) = a
 
 toHLists :: forall e e1 e2 ci ri result.  (ToHLists e e1 e2 ri ci result)
     => DimMat [ri,ci] e -> HList result 
