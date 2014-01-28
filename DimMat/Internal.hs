@@ -71,6 +71,7 @@ module DimMat.Internal (
    scalar,
    conj,
    scale, scaleRecip,
+   recipMat,
    addConstant,
    add,
    sub,
@@ -545,9 +546,15 @@ scale (Dimensional t) (DimMat a) = DimMat (H.scale t a)
 
 {- | Numeric.Container.'H.scaleRecip'
 -}
-scaleRecip :: (MapMultEq e' ri ri', AreRecips e e')
-    => Quantity e a -> DimMat [ri,ci] a -> DimMat [ri',ci] a
-scaleRecip (Dimensional t) (DimMat a) = DimMat (H.scale t a)
+scaleRecip :: (MapMultEq e r' r'', AreRecips r r', AreRecips c c',
+                c' ~ (DOne ': _1))
+    => Quantity e a -> DimMat [r,c] a -> DimMat [r'',c'] a
+scaleRecip (Dimensional t) (DimMat a) = DimMat (H.scaleRecip t a)
+
+-- | the same as  @scaleRecip (_1 :: Dimensionless t)@
+recipMat :: (AreRecips r r', AreRecips c c', c' ~ (DOne ': _1))
+    => DimMat [r,c] a -> DimMat [r',c'] a
+recipMat (DimMat m) = DimMat (H.scaleRecip 1 m)
 
 liftH2 :: (m ~ DimMat [ri,ci] a,
           h ~ H.Matrix a) => (h -> h -> h) -> m -> m -> m
