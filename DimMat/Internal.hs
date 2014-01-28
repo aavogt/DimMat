@@ -48,6 +48,7 @@ module DimMat.Internal (
    trans,
    -- reshape, flatten, fromLists, toLists, buildMatrix,
    toHLists, toHList,
+   fromHLists, fromHList,
    (@@>),
 
    -- asRow, asColumn, fromRows, toRows, fromColumns, toColumns
@@ -168,6 +169,7 @@ module DimMat.Internal (
    AreRecips',ToHLists,ToHList,UnDimMat,AllEq,
    HListFromList,AddDimensional,ToHListRows',
    ToHListRow,AddQty,
+   HMapOutWith(..),
   ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
@@ -572,18 +574,9 @@ equal (DimMat a) (DimMat b) = H.equal a b
 -- ideally any transformation of units (say replace all metre by seconds)
 -- that still fits should work. This will involve re-doing the lookups
 -- done in 'matD'
-cmap :: (MapMultEq deltaE ri ri')
-    => proxy deltaE
-    -> (forall l m t i th n j e. 
-        (N.NumType l, N.NumType m, N.NumType t, N.NumType i,
-         N.NumType n, N.NumType j,
-         e ~ Dim l m t i th n j) =>
-           Quantity e a -> Quantity (Mul e deltaE) b)
-    -> DimMat [ri,ci] a -> DimMat [ri',ci] b
-cmap _ f m = error "cmap not implemented"
-    {- H.mapMatrixWithIndex
-     will be useful. 
-    -}
+cmap f = error "cmap not implemented yet"
+    -- fromHLists . hMap (HMap f) . toHLists
+    -- needs some type-signature work to avoid ambiguous type error
 
 {- | the slightly involved type here exists because
 ci1 and ci2 both start with DOne, but ci2's contribution
@@ -725,6 +718,17 @@ fromHList xs = DimVec (H.fromList (hMapOut RmDimensional xs))
 data RmDimensional = RmDimensional
 instance (x ~ Quantity d y) => ApplyAB RmDimensional x y where
         applyAB _ (Dimensional a) = a
+
+fromHLists ::
+        (ToHLists e e1 e2 ri ci result,
+         HMapOut (HMapOutWith RmDimensional) result [e],
+         ci ~ (DOne ': _1), H.Field e)
+    => HList result -> DimMat [ri,ci] e
+fromHLists xs = DimMat (H.fromLists (hMapOut (HMapOutWith RmDimensional) xs))
+
+newtype HMapOutWith f = HMapOutWith f
+instance (HMapOut f l e, es ~ [e], HList l ~ hl) => ApplyAB (HMapOutWith f) hl es where
+    applyAB (HMapOutWith f) = hMapOut f
 
 toHLists :: forall e e1 e2 ci ri result.  (ToHLists e e1 e2 ri ci result)
     => DimMat [ri,ci] e -> HList result 
