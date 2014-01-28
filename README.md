@@ -12,6 +12,7 @@ program does the right thing.
 Haddocks are available at http://aavogt.github.io/haddock/DimMat
 
 ## related work
+* [dimensional-vectors](https://github.com/bjornbm/dimensional-vectors) is smaller, and uses a `[[a]]` representation of the data instead of `Data.Packed.Matrix a`
 * http://www.haskell.org/haskellwiki/Physical_units
 
 ### matrix dimensions statically checked
