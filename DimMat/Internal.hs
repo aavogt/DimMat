@@ -101,7 +101,10 @@ module DimMat.Internal (
    -- ** Linear Systems
    -- linearSolve, luSolve, cholSolve, linearSolveLS, linearSolveSVD,
    inv,
-   -- pinv, pinvtol,
+   pinv, 
+#if MIN_VERSION_hmatrix(0,15,0)
+   pinvTol,
+#endif
    det,
    -- invlndet,
    rank,
@@ -480,6 +483,23 @@ type instance InvCxt
 
 inv :: (InvCxt sh sh', sh' ~ [ri2 ': _1 , DOne ': ci2]) => DimMat sh a -> DimMat sh' a
 inv (DimMat a) = DimMat (H.inv a)
+
+type family PInvCxt (sh :: [[*]]) (sh' :: [[*]]) :: Constraint
+       
+type instance PInvCxt
+    [a11 ': ri, dOne ': ci]
+    [a11' ': ri', dOne' ': ci'] =
+        (SameLengths [ri,ci'], SameLengths [ci,ri'], AreRecips ri ci', AreRecips ci ri',
+        dOne ~ DOne, dOne' ~ DOne, a11 ~ Div DOne a11', a11' ~ Div DOne a11)
+
+pinv :: (PInvCxt sh sh', sh' ~ [ri2 ': _1 , DOne ': ci2]) => DimMat sh a -> DimMat sh' a
+pinv (DimMat a) = DimMat (H.pinv a)
+
+#if MIN_VERSION_hmatrix(0,15,0)
+-- on hmatrix 13, the pinvTol function has type Double -> Matrix Double -> MatrixDouble, later they generalized to Field t => Double -> Matrix t -> Matrix t
+pinvTol :: (PInvCxt sh sh', sh' ~ [ri2 ': _1 , DOne ': ci2]) => Double -> DimMat sh a -> DimMat sh' a
+pinvTol tol (DimMat a) = DimMat (H.pinvTol tol a)
+#endif
 
 det :: (SameLengths [ri,ci]) => DimMat [ri,ci] a
         -> Quantity (Product ri `Mul` Product ci) a
