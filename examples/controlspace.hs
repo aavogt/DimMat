@@ -72,10 +72,10 @@ testIsLTI =
   (\ a b c d -> case isLTI (1 *~ second) x u y a b c d of
    _ -> do
     print $ vsep
-        [text "A = " </> indent 0 (pretty (konst _0 `asTypeOf` a)),
-         text "B = " </> indent 0 (pretty (konst _1 `asTypeOf` b)),
-         text "C = " </> indent 0 (pretty (konst _2 `asTypeOf` c)),
-         text "D = " </> indent 0 (pretty (konst _3 `asTypeOf` d))]
+        [text "A = " </> indent 0 (pretty (zeroes `asTypeOf` a)),
+         text "B = " </> indent 0 (pretty (zeroes `asTypeOf` b)),
+         text "C = " </> indent 0 (pretty (zeroes `asTypeOf` c)),
+         text "D = " </> indent 0 (pretty (zeroes `asTypeOf` d))]
     ) undefined undefined undefined undefined
 
 
