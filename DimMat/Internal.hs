@@ -90,6 +90,7 @@ module DimMat.Internal (
    -- ** Product class
    multiply,
    -- dot, absSum, norm1, norm2, normInf,
+   norm1, normInf,
    -- optimiseMult, mXm, mXv, vXm, (<.>),
    -- (<>), (<\>), outer, kronecker,
    -- ** Random numbers
@@ -424,6 +425,16 @@ DimVec v @> i = Dimensional (v H.@> hNat2Integral i)
     -> (Proxy i, Proxy j)
     -> Quantity ty a
 DimMat m @@> (i,j) = Dimensional (m H.@@> (hNat2Integral i,hNat2Integral j))
+
+norm1 :: (sh ~ [r11 ': rs,ci], rs ~ MapConst r11 rs, ci ~ MapConst DOne ci, a ~ H.RealOf a)
+         => DimMat sh a
+         -> Quantity r11 a
+norm1 (DimMat a) = Dimensional (H.pnorm H.PNorm1 a)
+
+normInf :: (sh ~ [r11 ': rs,ci], rs ~ MapConst r11 rs, ci ~ MapConst DOne ci, a ~ H.RealOf a)
+           => DimMat sh a
+           -> Quantity r11 a
+normInf (DimMat a) = Dimensional (H.pnorm H.Infinity a)
 
 type family MultiplyCxt (sh1 :: [[*]]) (sh2 :: [*]) (sh3 :: [*]) :: Constraint
 type instance MultiplyCxt [r11 ': r,ci] rj ri' =
