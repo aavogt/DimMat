@@ -13,6 +13,7 @@ Haddocks are available at http://aavogt.github.io/haddock/DimMat
 
 ## related work
 * [dimensional-vectors](https://github.com/bjornbm/dimensional-vectors) is smaller, and uses a `[[a]]` representation of the data instead of `Data.Packed.Matrix a`
+* https://github.com/bjornbm/dimensional-experimental/blob/master/Numeric/Units/Dimensional/AD.hs implements 
 * http://www.haskell.org/haskellwiki/Physical_units
 
 ### matrix dimensions statically checked
@@ -21,6 +22,7 @@ These packages provide operations where the typechecker will prevent invalid ope
 * http://hackage.haskell.org/package/vector-static
 * http://hackage.haskell.org/package/linear
 * http://hackage.haskell.org/package/Vec
+* http://hackage.haskell.org/package/hmatrix-static
 * [vector-space](http://hackage.haskell.org/package/vector-space) has limited operations on tuples (up to 4 elements)
 * [tensor](http://hackage.haskell.org/package/tensor) has the number of indices at type level, but the range over which index varies is checked at runtime
 

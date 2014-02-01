@@ -18,7 +18,6 @@ import Data.HList.CommonMain (hZero,hSucc)
 import DimMat.Internal
 import Data.Packed.Vector(
   Vector,
-  dim,
   )
 import Data.Packed.Matrix(
   Matrix,
@@ -39,7 +38,8 @@ import Data.Packed.Development(
   atM',
   )
 
-import Numeric.Units.Dimensional.TF (Dimensional(..))
+import Data.Dimensions.Unsafe (Dim(Dim))
+import Data.Dimensions (dim)
 import Language.Haskell.TH.Quote
 
 matD = QuasiQuoter {
@@ -87,7 +87,7 @@ buildMatST es = let r = length es
               [| (DimMat $ runSTMatrix $(doE $
                     bindS (varP n) [| newUndefinedMatrix RowMajor r c |] :
                     [ noBindS [| unsafeWriteMatrix $(varE n) i j
-                                    ((\(Dimensional a) -> a) $(varE (vij i j))) |]
+                                    ((\(Dim a) -> a) $(varE (vij i j))) |]
                     | i <- [0 .. r-1], j <- [0 .. c-1]] ++
                     [ noBindS [| return $(varE n) |] ])
                  ) `asTypeOf` toDM $(varE p) |])
@@ -96,10 +96,10 @@ buildMatST es = let r = length es
                   (\a b -> [| $b `const` $a |])
                   [| $(varE m) `asTypeOf` toDM $(varE p) |]
                   -- a check that lookups actually work
-                  [ [| $(varE (vij i j)) `asTypeOf`
+                  ([] >> [ [| $(varE (vij i j)) `asDimTypeOf`
                           ($(varE m) @@> ($(mkNat i),$(mkNat j))) |] 
                       | i <- [0 .. r-1],
-                        j <- [0 .. c-1] ]
+                        j <- [0 .. c-1] ])
           )
     )
     []

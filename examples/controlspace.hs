@@ -1,3 +1,5 @@
+{-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -22,6 +24,7 @@ import Numeric.Units.Dimensional.TF
 import qualified Prelude as P
 import Text.PrettyPrint.ANSI.Leijen
 
+import GHC.TypeLits
 
 import qualified Numeric.LinearAlgebra as H
 
@@ -60,6 +63,15 @@ m^-1 s 5.014435047745458e-19 0.9999999999999999
 aSmall = [matD| a22, a23; a42, a43 |]
 aInvSmall = scale (_1 / det aSmall)
     [matD| a43, negate a23; negate a42, a22 |]
+
+id2 = proxy :: Proxy (0 * a)
+
+charEq lam1 lam2 x1 x2 =
+        (det ( aSmall `sub` [matD| lam1, _0; _0, lam2 |]),
+         scale lam1 x1 `sub` multiply aSmall x1 `asTypeOf` (undefined :: DimMat [[s,t],'[DOne]] Double),
+         scale lam2 x2 `sub` multiply aSmall x2 `asTypeOf` (undefined :: DimMat [[s,t],'[DOne]] Double),
+         hconcat x1 x2 `asTypeOf` (undefined :: DimMat [[t,v],[DOne,u]] Double))
+-- still has ambiguity. Do the SVD instead?
 
 {-
 >>> cmap (Scale' ((2::Double) *~ second)) aSmall
@@ -166,7 +178,7 @@ pendulum = isExample (a',b',c',d')
                        _0, _0, _1, _0 |]
            d' = zeroes
 
-poles (a,_,_,_) = eigenvalues a
+-- poles (a,_,_,_) = eigenvalues a
 
 -- causes no problems for AV
 evaluatePendulum = evaluate pendulum

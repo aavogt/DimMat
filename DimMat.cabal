@@ -15,12 +15,12 @@ tested-with:         GHC==7.6.2
 
 library
   exposed-modules:     DimMat, DimMat.QQ, DimMat.Internal
-  build-depends:       base >=4.6 && <4.7,
-                       dimensional-tf >=0.2 && <0.3,
+  build-depends:       base >=4.6 && <4.9,
+                       units >= 1.1,
                        hmatrix-syntax >=0.1 && <0.2,
-                       template-haskell >=2.8 && <2.9,
+                       template-haskell >=2.8 && <3,
                        numtype-tf >=0.1 && <0.2,
-                       ad >=3.4 && <3.5,
+                       -- ad >=3.4 && <3.5,
                        hmatrix >=0.15 && <0.16,
                        ansi-wl-pprint,
                        HList >= 0.3

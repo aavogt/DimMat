@@ -1,15 +1,18 @@
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ViewPatterns, AllowAmbiguousTypes #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE QuasiQuotes #-}
 module T1 where
 import DimMat
-import qualified Prelude as P
+import Data.Dimensions.SI
+import Data.Dimensions.Poly
+import Data.Dimensions.Unsafe
 
 
-x00 = (1::Double) *~ (metre * kilo gram)
-x10 = 1 *~ (second * kilo gram)
-x01 = 1 *~ (metre * second)
-x11 = 1 *~ (second * second)
+-- probably there's a nicer way to write  kg m?
+x00 = 1 % Meter  .* 1 % kilo Gram
+x10 = 1 % Second .* 1 % kilo Gram
+x01 = 1 % Meter  .* 1 % Second
+x11 = 1 % Second .* 1 % Second
 
 
 {- |
@@ -42,6 +45,7 @@ You get the same thing back (except for different type defaulting)
 -}
 xs = [matD| x00,x01; x10,x11 |]
 
+{-
 {- |
 
 >>> y
@@ -68,3 +72,4 @@ H[H[1.0 m kg, 1.0 m s, 0.0 m kg, 0.0 m s, 0.0 m kg, 0.0 m s], H[1.0 kg s, 1.0 s^
 
 -}
 z = diagBlock $ hBuild xs xs xs
+-}
