@@ -96,10 +96,10 @@ buildMatST es = let r = length es
                   (\a b -> [| $b `const` $a |])
                   [| $(varE m) `asTypeOf` toDM $(varE p) |]
                   -- a check that lookups actually work
-                  ([] >> [ [| $(varE (vij i j)) `asDimTypeOf`
+                  [ [| $(varE (vij i j)) `asDimTypeOf`
                           ($(varE m) @@> ($(mkNat i),$(mkNat j))) |] 
                       | i <- [0 .. r-1],
-                        j <- [0 .. c-1] ])
+                        j <- [0 .. c-1] ]
           )
     )
     []
