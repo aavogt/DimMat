@@ -45,7 +45,6 @@ You get the same thing back (except for different type defaulting)
 -}
 xs = [matD| x00,x01; x10,x11 |]
 
-{-
 {- |
 
 >>> y
@@ -72,4 +71,3 @@ H[H[1.0 m kg, 1.0 m s, 0.0 m kg, 0.0 m s, 0.0 m kg, 0.0 m s], H[1.0 kg s, 1.0 s^
 
 -}
 z = diagBlock $ hBuild xs xs xs
--}

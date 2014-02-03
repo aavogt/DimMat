@@ -431,7 +431,7 @@ type instance AtEq (a ': as) (HSucc n) b = AtEq as n b
 
 -- | multiplication with information going in any direction (hopefully)
 type MultEq a b c =
-        ( (a @+ b) @~ c, (b @+ a) @~ c, (c @- a) @~ b, (c @- b) @~ a)
+        ( (a @+ b) ~ c, (b @+ a) @~ c, (c @- a) @~ b, (c @- b) @~ a)
 
 type family Head (a :: [k]) :: k
 type instance Head (a ': as) = a
