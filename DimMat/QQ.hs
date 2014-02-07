@@ -2,7 +2,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 -- | a variation on <http://hackage.haskell.org/package/hmatrix-syntax>,
 -- which constructs a matrix which has dimensions stored.
-module DimMat.QQ (matD) where
+module DimMat.QQ (matD,blockD) where
 
 import Data.Packed.Syntax.Internal
 import Language.Haskell.TH
@@ -38,6 +38,9 @@ import Data.Packed.Development(
   at',
   atM',
   )
+import Data.List(
+  transpose
+  )
 
 import Numeric.Units.Dimensional.TF (Dimensional(..))
 import Language.Haskell.TH.Quote
@@ -58,6 +61,15 @@ matD = QuasiQuoter {
   quoteType = error "matD"
  }
 
+blockD = QuasiQuoter {
+  quoteExp = \s -> case matListExp s of
+    Right (_,_,x) -> buildBlockST (map (map return) x)
+    Left msg -> fail msg,
+  quotePat = error "blockD",
+  quoteDec = error "blockD",
+  quoteType = error "blockD"
+}
+
 nestedTupE = foldr (\a b -> tupE [a,b]) [| () |]
 nestedTupP = foldr (\a b -> tupP [a,b]) [p| () |]
 
@@ -68,6 +80,19 @@ matrixNames = zipWith (\i -> zipWith (\j _ -> vij i j) [0 .. ])  [0 .. ]
 toHListP = varPs . map (varPs . map varP) . matrixNames
 vij i j = mkName ("x"++show i++"_"++show j)
 
+buildBlockST :: [[Q TH.Exp]] -> Q TH.Exp
+buildBlockST es =
+  do
+    let rows = map (foldWithNamedFunction 'hconcat) es
+    let fullHFirst = foldWithNamedFunction 'vconcat rows
+    let cols = map (foldWithNamedFunction 'vconcat) (transpose es)
+    let fullVFirst = foldWithNamedFunction 'hconcat cols
+    [| $(fullHFirst) `asTypeOf` $(fullVFirst) |]
+
+foldWithNamedFunction :: Name -> [Q TH.Exp] -> Q TH.Exp
+foldWithNamedFunction f [] = undefined
+foldWithNamedFunction f [e] =  e
+foldWithNamedFunction f (e:es) = [| $(varE f) $(e) $(foldWithNamedFunction f es) |]
 
 -- adapted from Data.Packed.Syntax
 buildMatST :: [[Q TH.Exp]] -> Q TH.Exp
