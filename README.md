@@ -1,5 +1,5 @@
 # compile-time checked units for matrices
-Two related generalizations of `dimensional-tf` are explored in this package:
+Two related generalizations of `dimensional-tf` (and a branch using a ghc-7.8 only [units](http://hackage.haskell.org/package/units)) are explored in this package:
 
 * provide hmatrix operations that know about units too
 * automatic differentiation (`ad` package) that knows about units
@@ -9,7 +9,18 @@ for functions that operate on the involved quantities are more difficult (see
 `examples/controlspace.hs`). In return, you get a stronger assurance that your
 program does the right thing.
 
+Additionally, there is an emphasis on type inference going both ways:
+in ordinary haskell this is pretty much provided. For example if we have,
+`z = x + y`, then if due to other parts of the program the compiler knows
+`x :: (Int,_1,_2)`, `y :: (_3,Int,_4)` and `z :: (_5,_6,Int)`, it can
+conclude that (`+`) is needed with type `(Int,Int,Int) -> (Int,Int,Int) -> (Int,Int,Int)` [^note].
+This means using things with kind Constraint (class/type/type family) to
+
+
+[^note]: which isn't available by default, but you can check http://hackage.haskell.org/package/NumInstances or write it by hand
+
 Haddocks are available at http://aavogt.github.io/haddock/DimMat
+
 
 ## related work
 * [dimensional-vectors](https://github.com/bjornbm/dimensional-vectors) is smaller, and uses a `[[a]]` representation of the data instead of `Data.Packed.Matrix a`
