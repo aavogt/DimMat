@@ -1,21 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE OverlappingInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
 {- | an incomplete extension of dimensional-tf to work with hmatrix and ad
 Haddocks are organized to follow hmatrix
 
@@ -209,6 +192,8 @@ import Data.Dimensions.Unsafe
 import Data.Dimensions.Poly
 import Data.Dimensions.Show
 
+import Data.Dimensions.DimSpec
+
 import qualified Numeric.LinearAlgebra as H
 import qualified Numeric.LinearAlgebra.LAPACK as H
 
@@ -238,7 +223,9 @@ diff f z = Dimensional $ AD.diff (unD . f . Dimensional) (unD z)
 
 TODO: gradients, hessians, etc.
 
-Types for derivative towers can see hlist's @HList\/Data\/HList\/broken\/Lazy.hs@
+Types for derivative towers can see hlist's @HList\/Data\/HList\/broken\/Lazy.hs@,
+but laziness doesn't really make much sense if the @take@ that is eventually used
+to get a finite list for printing etc.
 
 Complications include the fact that AD.grad needs a traversable,
 but hmatrix stuff is not traversable (due needing Storable). In ipopt-hs
@@ -276,11 +263,11 @@ data DimMat (sh :: [[ [DimSpec *] ]]) a where
 
 -- very crude
 instance (Show a, PPUnits sh) => Pretty (DimMat sh a) where
-    pretty (DimVec v) = case ppUnits (proxy :: Proxy sh) of
+    pretty (DimVec v) = case ppUnits (Proxy :: Proxy sh) of
         [rs] -> vcat
              [ dullgreen (string label) <+> string (show e)
                 | (e,label) <- H.toList v `zip` pad rs ]
-    pretty (DimMat m) = case ppUnits (proxy :: Proxy sh) of
+    pretty (DimMat m) = case ppUnits (Proxy :: Proxy sh) of
         [rs,cs] -> 
             vcat $
             map (hsep . onHead dullgreen) $
@@ -306,16 +293,16 @@ pad xs = let
 class PPUnits (sh :: [[ [DimSpec *] ]]) where
     ppUnits :: Proxy sh -> [[String]]
 instance (PPUnits' x, PPUnits xs) => PPUnits (x ': xs) where
-    ppUnits _ = ppUnits' (proxy :: Proxy x) : ppUnits (proxy :: Proxy xs)
+    ppUnits _ = ppUnits' (Proxy :: Proxy x) : ppUnits (Proxy :: Proxy xs)
 instance PPUnits '[] where
     ppUnits _ = []
 
 class PPUnits' (sh :: [ [DimSpec *] ]) where
     ppUnits' :: Proxy sh -> [String]
 instance (PPUnits' xs) => PPUnits' ('[] ': xs) where
-    ppUnits' _ = "1" : ppUnits' (error "ppUnits'" :: Proxy xs)
+    ppUnits' _ = "1" : ppUnits' (Proxy :: Proxy xs)
 instance (ShowDimSpec x, PPUnits' xs) => PPUnits' (x ': xs) where
-    ppUnits' _ = showDimSpec (proxy :: Proxy x) : ppUnits' (error "ppUnits'" :: Proxy xs)
+    ppUnits' _ = showDimSpec (Proxy :: Proxy x) : ppUnits' (Proxy :: Proxy xs)
 instance PPUnits' '[] where
     ppUnits' _ = []
 
@@ -431,7 +418,8 @@ type instance AtEq (a ': as) (HSucc n) b = AtEq as n b
 
 -- | multiplication with information going in any direction (hopefully)
 type MultEq a b c =
-        ( (a @+ b) ~ c, (b @+ a) @~ c, (c @- a) @~ b, (c @- b) @~ a)
+        ( (a @+ b) ~ c, (b @+ a) @~ c,
+          (c @- a) @~ b, (c @- b) @~ a)
 
 type family Head (a :: [k]) :: k
 type instance Head (a ': as) = a
@@ -551,8 +539,9 @@ class PInv (sh :: [[ [DimSpec *] ]]) (sh' :: [[ [DimSpec *] ]]) where
        
 instance 
   (sh ~  [_1 ': _2, '[] ': _3],
-   sh' ~ [r', c'], c' ~ ('[] ': _4),
-   MultiplyCxt sh r' c'inv,
+   sh' ~ [r1 ': r2, c'], c' ~ ('[] ': _4),
+   AreRecips r1 _1,
+   MultiplyCxt sh (r1 ':r2) c'inv,
    AreRecips c'inv c') =>
    PInv sh sh' where
     pinv (DimMat a) = DimMat (H.pinv a)
@@ -666,11 +655,11 @@ cols (DimMat a) = H.cols a
 
 -- | H.'H.rows' except type-level
 rowsNT :: DimMat (ri ': ci) a -> Proxy (HLength ri)
-rowsNT _ = proxy
+rowsNT _ = Proxy
 
 -- | H.'H.cols' except type-level
 colsNT :: DimMat [ri,ci] a -> Proxy (HLength ci)
-colsNT _ = proxy
+colsNT _ = Proxy
 
 -- | (m `hasRows` n) constrains the matrix/vector @m@ to have @n@ rows
 hasRows :: (SameLengths [HReplicateR n '[], ri], -- forwards
@@ -707,14 +696,14 @@ konst :: forall u us ones a _1.
      AllEq u us)
     => Dim a u -> DimMat [us, ones] a
 konst (Dim a) = DimMat (H.konst a
-    (hNat2Integral (proxy :: Proxy (HLength us)),
-     hNat2Integral (proxy :: Proxy (HLength ones))))
+    (hNat2Integral (Proxy :: Proxy (HLength us)),
+     hNat2Integral (Proxy :: Proxy (HLength ones))))
 
 -- | identity matrix. The size is determined by the type.
 ident :: forall ones a _1.
     (H.Field a, HNat2Integral (HLength ones), ones ~ ('[] ': _1)) =>
     DimMat [ones, ones] a
-ident = DimMat (H.ident (hNat2Integral (proxy :: Proxy (HLength ones))))
+ident = DimMat (H.ident (hNat2Integral (Proxy :: Proxy (HLength ones))))
 
 -- | zero matrix. The size and dimension is determined by the type.
 zeroes :: forall r c a _1 _2 _3. (H.Field a,
@@ -724,8 +713,8 @@ zeroes :: forall r c a _1 _2 _3. (H.Field a,
                               r ~ (_2 ': _3))
     => DimMat [r, c] a
 zeroes = DimMat (H.konst 0
-        (hNat2Integral (proxy :: Proxy (HLength r)),
-         hNat2Integral (proxy :: Proxy (HLength c))))
+        (hNat2Integral (Proxy :: Proxy (HLength r)),
+         hNat2Integral (Proxy :: Proxy (HLength c))))
 
 type family CanAddConst (a :: k) (m :: [[k]]) :: Constraint
 type instance CanAddConst a [as, ones] = (AllEq a as, AllEq '[] ones)
@@ -766,64 +755,19 @@ diagBlock :: (db ~ DimMat [ri, '[] ': ci] e,
 diagBlock pairs = DimMat (H.diagBlock (hMapOut UnDimMat pairs))
 #endif
 
-{- to/from HLists fail with kind errors now
-toHList :: forall e e1 ri result.  (ToHList e e1 ri result)
-    => DimMat '[ri] e -> HList result 
-toHList (DimVec v) = case hListFromList (H.toList v) :: HList e1 of
-    e1 -> hMap AddDimensional e1
+class ToHList sh e result where
+    toHList :: DimMat sh e -> HList result
 
-fromHList :: forall e ri list.
-    (H.Field e,
-     HMapOut RmDimensional list e, ToHListRow ri e list)
-    => HList list -> DimMat '[ri] e
-fromHList xs = DimVec (H.fromList (hMapOut RmDimensional xs))
-
-data RmDimensional = RmDimensional
-instance (x ~ Dim y d) => ApplyAB RmDimensional x y where
-        applyAB _ (Dim a) = a
-
-class H.Field e => FromHLists sh e xs where
-    fromHLists :: HList xs -> DimMat sh e
-
+-- | given a vector like @x = DimMat '[units] e@ this does something like
+-- @[ (x \@> i) | i <- [1 .. n] ]@, if we had comprehensions for HLists
 instance 
-        (ToHListRows' ri ci e result,
-         HMapOut (HMapOutWith RmDimensional) result [e],
-         -- SameLengths [ri, result],
-         -- XXX
-         (HList resultHead ': _2) ~ result,
-         -- SameLengths [ci, resultHead],
-         ci ~ ('[] ': _1), H.Field e,
-         sh ~ [ri,ci]) =>
-    FromHLists sh e result where
-    fromHLists xs = DimMat (H.fromLists (hMapOut (HMapOutWith RmDimensional) xs))
-
-newtype HMapOutWith f = HMapOutWith f
-instance (HMapOut f l e, es ~ [e], HList l ~ hl) => ApplyAB (HMapOutWith f) hl es where
-    applyAB (HMapOutWith f) = hMapOut f
-
-class ToHLists sh e xs where
-    toHLists :: DimMat sh e -> HList xs
-instance (ToHListsCxt e e1 e2 ri ci xs) => ToHLists [ri,ci] e xs where
-  toHLists (DimMat m) = case hListFromList (map hListFromList (H.toLists m) :: [HList e1]) :: HList e2 of
-    e2 -> hMap (HMap AddDimensional) e2
-
-type ToHList e e1 ri result =
     (HListFromList e e1,
-     -- SameLengths [e1,result,ri],
-     -- XXX
+     SameLength result e1,
      HMapAux AddDimensional e1 result,
-     ToHListRow ri e result)
-
-type family ToHListRow (a :: [ [DimSpec *] ]) e (b :: [*]) :: Constraint
-type instance ToHListRow (a ': as) e (b ': bs) = (Dim e a ~ b, ToHListRow as e bs)
-
--- | performance (compile-time) is pretty bad
-type ToHListsCxt e e1 e2 ri ci result =
-    (HListFromList e e1,
-     HListFromList (HList e1) e2,
-     -- SameLengths [ci,e1], SameLengths [e2,result,ri],
-     HMapAux (HMap AddDimensional) e2 result,
-     ToHListRows' ri ci e result)
+     ToHListRow ri e result) =>
+   ToHList '[ri] e result where
+  toHList (DimVec v) = case hListFromList (H.toList v) :: HList e1 of
+      e1 -> hMap AddDimensional e1
 
 class HListFromList e e' where
         hListFromList :: [e] -> HList e'
@@ -832,13 +776,78 @@ instance HListFromList e '[] where
 instance (e ~ e', HListFromList e es) => HListFromList e (e' ': es) where
         hListFromList (e : es) = e `HCons` hListFromList es 
 
-class ToHListRows' (ri :: [ [DimSpec *] ]) (ci :: [ [DimSpec *] ]) (e :: *) (rows :: [*])
+type family ToHListRow (a :: [ [DimSpec *] ]) e (b :: [*]) :: Constraint
+type instance ToHListRow (a ': as) e (b ': bs) = (Dim e a ~ b, ToHListRow as e bs)
+
+
+class FromHList list sh e where
+  fromHList :: HList list -> DimMat sh e
+
+instance 
+    (H.Field e,
+     HMapOut RmDimensional list e,
+     ToHListRow ri e list) =>
+  FromHList list '[ri] e where
+  fromHList xs = DimVec (H.fromList (hMapOut RmDimensional xs))
+
+data RmDimensional = RmDimensional
+instance (x ~ Dim y d) => ApplyAB RmDimensional x y where
+        applyAB _ (Dim a) = a
+
+
+class FromHLists lists sh e where
+  fromHLists :: HList lists -> DimMat sh e
+
+
+-- | [[Dim e unit]] -> DimMat units e
+instance 
+  (ToHListRows' ri ci e lists,
+   HMapOut (HMapOutWith RmDimensional) lists [e],
+   (HList listsHead ': _2) ~ lists,
+   ci_ ~ ('[] ': _1), H.Field e,
+   DimSpecProxy2 ri_ ri,
+   DimSpecProxy2 ci_ ci) =>
+  FromHLists lists [ri_,ci_] e where
+    fromHLists xs = DimMat (H.fromLists (hMapOut (HMapOutWith RmDimensional) xs))
+
+
+newtype HMapOutWith f = HMapOutWith f
+instance (HMapOut f l e, es ~ [e], HList l ~ hl) => ApplyAB (HMapOutWith f) hl es where
+    applyAB (HMapOutWith f) = hMapOut f
+
+class ToHLists sh e xs where
+    toHLists :: DimMat sh e -> HList xs
+
+-- | DimMat units e -> [[Dim e unit]]
+instance
+    (HListFromList e e1,
+     HListFromList (HList e1) e2,
+     HMapAux (HMap AddDimensional) e2 xs,
+     ToHListRows' ri ci e xs,
+     DimSpecProxy2 ri_ ri,
+     DimSpecProxy2 ci_ ci,
+     SameLength e2 xs,
+     ci_ ~ ('[] ': ci__) )
+  => ToHLists [ri_,ci_] e xs where
+  toHLists (DimMat m) = case hListFromList (map hListFromList (H.toLists m) :: [HList e1]) :: HList e2 of
+    e2 -> hMap (HMap AddDimensional) e2
+
+
+class ToHListRows' (ri :: [ * ]) (ci :: [ * ]) (e :: *) (rows :: [*])
 instance ToHListRows' '[] ci e '[]
+
 instance (ToHListRows' ri ci e rows,
           MapMultEq r ci ci',
           HMapCxt (AddQty e) (HList ci') hListRow ci' row')
   => ToHListRows' (r ': ri) ci e (hListRow ': rows)
--}
+
+type family DimSpecProxy2 (ds :: [[DimSpec *]]) (proxyDs :: [*]) :: Constraint
+type instance DimSpecProxy2 (x ': xs) (p ': ps) = ((Proxy x ~ p) , DimSpecProxy2 xs ps)
+type instance DimSpecProxy2 '[] '[] = ()
+
+type family DimSpecProxy1 (ds :: [DimSpec *]) (proxyDs :: [*]) :: Constraint
+type instance DimSpecProxy1 (x ': xs) (p ': ps) = ((Proxy x ~ p) , DimSpecProxy1 xs ps)
+type instance DimSpecProxy1 '[] '[] = ()
 
 data AddQty e
 instance (qty ~ Dim d e) => ApplyAB (AddQty e) d qty

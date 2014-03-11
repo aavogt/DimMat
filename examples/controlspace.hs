@@ -19,9 +19,12 @@
 module T1 where
 import GHC.Exts (Constraint)
 import DimMat
-import Numeric.Units.Dimensional.TF.Prelude
-import Numeric.Units.Dimensional.TF
-import qualified Prelude as P
+-- import Numeric.Units.Dimensional.TF.Prelude
+-- import Numeric.Units.Dimensional.TF
+import Data.Dimensions.SI
+import Data.Dimensions.Show
+import Data.Dimensions
+import Data.Dimensions.Unsafe
 import Text.PrettyPrint.ANSI.Leijen
 
 import GHC.TypeLits
@@ -33,19 +36,22 @@ import qualified Numeric.LinearAlgebra as H
 -- not really stated on that page, but if you go back a couple of pages in their derivation
 -- you can see that the type of u is a 1x1 matrix whose sole element is a force
 
-massOfCart = (0.5 :: Double) *~ (kilo gram)
-massOfPendulum = (0.2 :: Double) *~ (kilo gram)
-coefficientOfFrictionForCart = (0.1 :: Double) *~ (newton / (meter / second))
-lengthToPendulumCenterOfMass = (0.3 :: Double) *~ meter
-massMomentOfInertiaOfPendulum = (0.006 :: Double) *~ (kilo gram * meter^pos2)
-g = (9.8 :: Double) *~ (meter / second^pos2)
+massOfCart = (0.5 :: Double) % kilo Gram
+massOfPendulum = (0.2 :: Double) % kilo Gram
+coefficientOfFrictionForCart = (0.1 :: Double) % (Newton :/ Meter :/ Second)
+lengthToPendulumCenterOfMass = (0.3 :: Double) % Meter
+massMomentOfInertiaOfPendulum = (0.006 :: Double) % (kilo Gram :* Meter:* Meter)
+g = (9.8 :: Double) % (Meter :/ Second :^ pTwo)
 
-p = massMomentOfInertiaOfPendulum*(massOfCart+massOfPendulum)+(massOfCart*massOfPendulum*lengthToPendulumCenterOfMass*lengthToPendulumCenterOfMass)
+p = massMomentOfInertiaOfPendulum .* (massOfCart .+ massOfPendulum)
+  .+ (massOfCart.*massOfPendulum.*lengthToPendulumCenterOfMass.*lengthToPendulumCenterOfMass)
 
-a22 = negate (massMomentOfInertiaOfPendulum+massOfPendulum * lengthToPendulumCenterOfMass * lengthToPendulumCenterOfMass) * coefficientOfFrictionForCart / p
-a23 = (massOfPendulum * massOfPendulum * g * lengthToPendulumCenterOfMass * lengthToPendulumCenterOfMass) / p
-a42 = negate (massOfPendulum * lengthToPendulumCenterOfMass * coefficientOfFrictionForCart) / p
-a43 = massOfPendulum * g * lengthToPendulumCenterOfMass*(massOfCart + massOfPendulum)/p
+neg x = (zero `asTypeOf` x) .- x
+a22 = neg (massMomentOfInertiaOfPendulum .+ massOfPendulum .* lengthToPendulumCenterOfMass .* lengthToPendulumCenterOfMass)
+                  .* coefficientOfFrictionForCart ./ p
+a23 = (massOfPendulum .* massOfPendulum .* g .* lengthToPendulumCenterOfMass .* lengthToPendulumCenterOfMass) ./ p
+a42 = neg (massOfPendulum .* lengthToPendulumCenterOfMass .* coefficientOfFrictionForCart) ./ p
+a43 = massOfPendulum .* g .* lengthToPendulumCenterOfMass.*(massOfCart .+ massOfPendulum)./p
 
 {-
 
@@ -61,16 +67,19 @@ m^-1 s 5.014435047745458e-19 0.9999999999999999
 
 -}
 aSmall = [matD| a22, a23; a42, a43 |]
-aInvSmall = scale (_1 / det aSmall)
-    [matD| a43, negate a23; negate a42, a22 |]
 
+
+aInvSmall = scale (unity ./ det aSmall)
+    [matD| a43, neg a23; neg a42, a22 |]
+
+{-
 id2 = proxy :: Proxy (0 * a)
 
 charEq lam1 lam2 x1 x2 =
         (det ( aSmall `sub` [matD| lam1, _0; _0, lam2 |]),
-         scale lam1 x1 `sub` multiply aSmall x1 `asTypeOf` (undefined :: DimMat [[s,t],'[DOne]] Double),
-         scale lam2 x2 `sub` multiply aSmall x2 `asTypeOf` (undefined :: DimMat [[s,t],'[DOne]] Double),
-         hconcat x1 x2 `asTypeOf` (undefined :: DimMat [[t,v],[DOne,u]] Double))
+         scale lam1 x1 `sub` multiply aSmall x1 `asTypeOf` (undefined :: DimMat [[s,t],'[ '[] ]] Double),
+         scale lam2 x2 `sub` multiply aSmall x2 `asTypeOf` (undefined :: DimMat [[s,t],'[ '[] ]] Double),
+         hconcat x1 x2 `asTypeOf` (undefined :: DimMat [[t,v],[ '[] ,u]] Double))
 -- still has ambiguity. Do the SVD instead?
 
 {-
@@ -186,16 +195,17 @@ evaluatePendulum = evaluate pendulum
 evaluate ::
     ( -- require all matrices to be at least 1x1
       -- really ought to be part of the MultiplyCxt
-     a ~ [_1 ': _2, DOne ': _3],
-     b ~ [_4 ': _5, DOne ': _6],
-     c ~ [_7 ': _8, DOne ': _9],
-     d ~ [_a ': _b, DOne ': _c],
+     a ~ [_1 ': _2, '[] ': _3],
+     b ~ [_4 ': _5, '[] ': _6],
+     c ~ [_7 ': _8, '[] ': _9],
+     d ~ [_a ': _b, '[] ': _c],
      H.Field e,
      LiSystemCxt dxs iv xs ys us a b c d) =>
     (DimMat a e, DimMat b e, DimMat c e, DimMat d e)
-    -> DimMat [xs, '[DOne]] e
-    -> DimMat [us, '[DOne]] e
-    -> (DimMat [dxs, '[DOne]] e, DimMat [ys, '[DOne]] e)
+    -> DimMat [xs, '[ '[] ]] e
+    -> DimMat [us, '[ '[] ]] e
+    -> (DimMat [dxs, '[ '[] ]] e, DimMat [ys, '[ '[] ]] e)
 evaluate (a,b,c,d) x u = case (a `multiply` x) `add` (b `multiply` u) of
     xDot -> case (c `multiply` x) `add` (d `multiply` u) of
      y -> (xDot, y)
+     -}

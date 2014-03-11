@@ -1,21 +1,48 @@
 name:                DimMat
 version:             0.1.0.0
-synopsis:            matrices with statically checked units
--- description:         
+synopsis:            matrices with compile-time checked units and sizes
+description:         a wrapper of HMatrix/LAPACK which attaches units
+                     to the transformations
 license:             BSD3
 license-file:        LICENSE
 author:              Doug McClean, Adam Vogt
 maintainer:          vogt.adam@gmail.com
--- copyright:           
+copyright:           Doug McClean, Adam Vogt
 category:            Math
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
-tested-with:         GHC==7.6.2
+tested-with:         GHC==7.8
 
 library
-  exposed-modules:     DimMat, DimMat.QQ, DimMat.Internal
-  build-depends:       base >=4.6 && <4.9,
+  exposed-modules:     DimMat,
+                       DimMat.QQ,
+                       DimMat.Internal
+
+  default-language:    Haskell2010
+
+  -- pretty much everything
+  default-extensions:   
+                        AllowAmbiguousTypes
+                        ConstraintKinds
+                        DataKinds
+                        FlexibleContexts
+                        FlexibleInstances
+                        GADTs
+                        GeneralizedNewtypeDeriving
+                        KindSignatures
+                        MultiParamTypeClasses
+                        OverlappingInstances
+                        PolyKinds
+                        RankNTypes
+                        ScopedTypeVariables
+                        StandaloneDeriving
+                        TemplateHaskell
+                        TypeFamilies
+                        TypeOperators
+                        UndecidableInstances
+
+  build-depends:       base >=4.7 && <4.9,
                        units >= 1.1,
                        hmatrix-syntax >=0.1 && <0.2,
                        template-haskell >=2.8 && <3,
@@ -25,12 +52,3 @@ library
                        ansi-wl-pprint,
                        HList >= 0.3
   default-language:    Haskell2010
-  other-extensions:    TemplateHaskell,
-                       FlexibleContexts,
-                       TypeOperators,
-                       UndecidableInstances,
-                       DataKinds,
-                       PolyKinds,
-                       KindSignatures,
-                       TypeFamilies,
-                       RankNTypes
