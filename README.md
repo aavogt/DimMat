@@ -21,14 +21,22 @@ This means using things with kind Constraint (class/type/type family) to
 
 Haddocks are available at http://aavogt.github.io/haddock/DimMat
 
+# Installation
+Get ghc-7.6 or ghc-7.8 and cabal-install. Then:
+```sh
+cabal install cabal-meta cabal-src
+git clone https://github.com/aavogt/DimMat
+cd DimMat/
+cabal-meta install
+```
 
-## related work
-### units
+# Related Work
+## Units and AD or linear algebra
 * [dimensional-vectors](https://github.com/bjornbm/dimensional-vectors) is smaller, and uses a `[[a]]` representation of the data instead of `Data.Packed.Matrix a`
 * https://github.com/dmcclean/dimensional-dk-linalg shares some code with DimMat, but 
 * https://github.com/bjornbm/dimensional-experimental/blob/master/Numeric/Units/Dimensional/AD.hs has the same wrapper for AD
 
-### matrix dimensions statically checked
+## Matrix dimensions statically checked
 These packages provide operations where the typechecker will prevent invalid operations, such as multiplying an m×n matrix with a p×q matrix when n /= p, at compile-time.
 
 * http://hackage.haskell.org/package/vector-static
@@ -40,9 +48,9 @@ These packages provide operations where the typechecker will prevent invalid ope
 * [tensor](http://hackage.haskell.org/package/tensor) has the number of indices at type level, but the range over which index varies is checked at runtime some of the time
 * [storable-static-array](http://github.com/chowells79/storable-static-array) uses ghc-7.8 features
 
-### units
+## units
 * The [haskellwiki physical units](http://www.haskell.org/haskellwiki/Physical_units) mentions several methods to check units at compile time or at run-time
 * https://github.com/haasn/units
 
-### the record connection
+## Records
 [extensible records](http://www.haskell.org/haskellwiki/Extensible_record) have many needs in common with DimMat. Types in HMatrix like `fromBlocks :: [[Matrix t]] -> Matrix t` are (or will be) generalized to use [HList](http://hackage.haskell.org/package/HList) instead of ordinary lists (`[]`).
