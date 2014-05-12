@@ -9,10 +9,10 @@ import Data.Dimensions.Unsafe
 
 
 -- probably there's a nicer way to write  kg m?
-x00 = 1 % Meter  .* 1 % kilo Gram
-x10 = 1 % Second .* 1 % kilo Gram
-x01 = 1 % Meter  .* 1 % Second
-x11 = 1 % Second .* 1 % Second
+x00 = 1 *~ (meter * kilo gram)
+x10 = 1 *~ (second * kilo gram)
+x01 = 1 *~ (meter  * second)
+x11 = 1 *~ (second * second)
 
 
 {- |

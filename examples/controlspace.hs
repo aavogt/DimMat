@@ -216,3 +216,7 @@ evaluate (a,b,c,d) x u = case (a `multiply` x) `add` (b `multiply` u) of
      y -> (xDot, y)
      -}
 
+
+
+ctrb = let (a,b,_,_) = pendulum
+        in [blockD| b, a `multiply` b, a `multiply` a `multiply` b, a `multiply` a `multiply` a `multiply` b |]

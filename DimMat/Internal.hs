@@ -20,137 +20,10 @@ TODO:
 
 *  missing operations (check export list comments)
 -}
-module DimMat.Internal (
-   -- * Data.Packed.Vector
-   (@>),
-   -- * Data.Packed.Matrix
-   -- ** dimension
-   cols, rows,
-   colsNT, rowsNT,
-   hasRows, hasCols,
-   -- (><),
-   trans,
-   -- reshape, flatten, fromLists, toLists, buildMatrix,
-   -- broken
-   -- ToHLists(toHLists), toHList, FromHLists(fromHLists), fromHList,
-   (@@>),
+module DimMat.Internal  where
 
-   -- asRow, asColumn, fromRows, toRows, fromColumns, toColumns
-   -- fromBlocks
-#if MIN_VERSION_hmatrix(0,15,0)
-   diagBlock,
-#endif
-   -- toBlocks, toBlocksEvery, repmat, flipud, fliprl
-   -- subMatrix, takeRows, dropRows, takeColumns, dropColumns,
-   -- extractRows, diagRect, takeDiag, mapMatrix,
-   -- mapMatrixWithIndexM, mapMatrixWithIndexM_, liftMatrix,
-   -- liftMatrix2, liftMatrix2Auto, fromArray2D,
-
-   ident, -- where to put this?
-   -- * Numeric.Container
-   -- constant, linspace,
-   diag,
-   ctrans,
-   -- ** Container class
-   scalar,
-   conj,
-   scale, scaleRecip,
-   recipMat,
-   addConstant,
-   add,
-   sub,
-   mulMat, mulMat,
-   divideMat, divideVec,
-   equal,
-   arctan2,
-   hconcat,
-   vconcat,
-   cmap,
-   konst,
-   zeroes,
-   -- build, atIndex, minIndex, maxIndex, minElement, maxElement,
-   -- sumElements, prodElements, step, cond, find, assoc, accum,
-   -- Convert
-   -- ** Product class
-   DimMat.Internal.dot,
-   -- absSum, norm1, norm2, normInf,
-   -- norm1, normInf,
-   pnorm,
-   -- optimiseMult, mXm, mXv, vXm, (<.>),
-   -- (<>), (<\>), outer, kronecker,
-   -- ** Random numbers
-   -- ** Element conversion
-   -- ** Input/Output
-   -- ** Experimental
-
-   -- * Numeric.LinearAlgebra.Algorithms
-   -- | incomplete wrapper for "Numeric.LinearAlgebra.Algorithms"
-
-   -- ** Linear Systems
-   -- linearSolve, luSolve, cholSolve, linearSolveLS, linearSolveSVD,
-   inv,
-   PInv(pinv), 
-   pinvTol,
-   det,
-   -- invlndet,
-   rank,
-   -- rcond,
-   -- ** Matrix factorizations
-
-   -- *** Singular value decomposition
-   -- *** Eigensystems
-   -- $eigs
-   {-
-   wrapEig, wrapEigOnly,
-   EigV, EigE,
-   -- **** eigenvalues and eigenvectors
-   eig,
-   eigC,
-   eigH,
-   eigH',
-   eigR,
-   eigS,
-   eigS',
-   eigSH,
-   eigSH',
-
-   -- **** eigenvalues
-   eigOnlyC,
-   eigOnlyH,
-   eigOnlyR,
-   eigOnlyS,
-   eigenvalues,
-   eigenvaluesSH,
-   eigenvaluesSH',
-   -}
-
-   -- *** QR
-   -- *** Cholesky
-   -- *** Hessenberg
-   -- *** Schur
-   -- *** LU 
-
-   -- ** Matrix functions
-   -- sqrtm, matFunc
-   expm,
-
-   -- ** Nullspace
-   -- ** Norms
-   -- ** Misc
-   -- ** Util 
-
-   -- * Automatic Differentiation
-   -- $ad
-#ifdef WITH_Ad
-   diff,
-#endif
-   -- * actually internal
-   module DimMat.Internal,
-  ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
-import Prelude
-
 
 import Data.Type.Equality (type (==))
 import qualified Prelude as P
@@ -167,6 +40,7 @@ import Data.List (transpose)
 
 import Data.HList.CommonMain hiding (MapFst)
 
+-- * Replacements for Dimensional classes
 
 -- | a version of Numeric.Units.Dimensional.'D.Mul' which
 -- requires the arguments to include the 'D.Dim' type constructor
@@ -187,6 +61,8 @@ instance (D.Div a b c,
        b ~ Dim l' m' t' i' th' n' j',
        c ~ Dim l'' m'' t'' i'' th'' n'' j'') =>
        Div a b c
+
+-- * AD
 
 #ifdef WITH_AD
 {- |
@@ -230,6 +106,8 @@ I got around this problem by copying data. Perhaps that is the solution?
 -}
 
 
+-- * GADT for linear algebra with units
+
 {- | Generalization of 'Dimensional' to matrices and vectors. Units
 in each coordinate are known at compile-time. This wraps up HMatrix.
 -}
@@ -245,7 +123,6 @@ data D (sh :: ( *, [[ * ]])) e where
   DScal :: (H.Field e) => e -> D '(r1,'[]) e
       -- ^ the same as Dimensional
 
--- very crude
 instance (Show a, PPUnits sh) => Pretty (D sh a) where
     pretty (DVec v) = case ppUnits (Proxy :: Proxy sh) of
         [rs] -> vcat
@@ -267,6 +144,7 @@ instance (Show a, PPUnits sh) => Pretty (D sh a) where
 instance Pretty (D sh a) => Show (D sh a) where
     showsPrec p x = showsPrec p (pretty x)
 
+-- ** pretty instance
 pad :: [String] -> [String]
 pad [] = []
 pad xs = let
@@ -304,6 +182,42 @@ instance (Show (Quantity a Int), Dim l m t i th n j ~ a) => ShowDimSpec a where
           "" -> "1"
           x -> x
 
+-- * Constraints
+{- $justification
+A major theme in this library is that type inference goes in whichever direction
+it can: in ordinary haskell it is very common for argument types to be determined
+by the result types. For example see any code that uses 'Num' or 'Read'.
+
+When we use type families, things look more convenient:
+
+@
+data Nat = S Nat | Z
+
+type family Add (a :: Nat) (b :: Nat) :: Nat
+type instance Add Z b = b
+type instance Add (S a) b = Add a (S b)
+@
+
+But ghc is unable to deduce things like @a ~ Z@ given evidence such as @Add Z a ~ Z@.
+One way around this is to use @ConstraintKinds@:
+
+@
+type AddT (a :: Nat) (b :: Nat) (c :: Nat)
+          = (Add a b ~ c, Sub c a ~ b, Sub c b ~ a)
+@
+
+Which leads to functions like  @f :: AddT a b ab => ... @. This is bad for a couple reasons:
+
+* the right-hand-side of the type can only mention type variables on the
+  left-hand-side.
+* the left hand side can only bind type variables. Working around this
+  leads to many auxiliary type families such as Fst, Snd and Head, or
+  leads to a @type family AddT@
+
+So below many constraints expressed as classes, since they have less
+of those limitations.
+
+-}
 
 -- | @a*b = c@ when any are lists
 class MultEq (a :: k1) (b :: k2) (c :: k3)
@@ -325,6 +239,8 @@ instance (Zip2 Div bs cs aInv,
           Mul a aInv DOne) => MultEq a  bs cs
 instance Mul a b c => MultEq a b c
 
+
+-- ** Zip
 
 class (SameLength a b, SameLength b c) =>
     Zip3
@@ -371,18 +287,12 @@ instance ((a ': as) ~ aas,
 instance Zip1 op '[] b c
 
 
-type family HeadOf (x :: k) (xs :: [k]) :: Constraint
-type instance HeadOf x (x' ': u1) = (x ~ x')
-type instance HeadOf x '[] = ("DimMat.HeadOf" ~ "given empty list")
-
 {- | given @ijs :: [[Quantity a]]@ (except the : and [] constructors are
 actually (,) and (), ie. a HList that doesn't use the HList constructors),
 calculate a @DimMat rowUnits colUnits@, where the outer product of rowUnits
 and colUnits gives the units at each index in the ijs.  The first element
 of colUnits is DOne.
 -}
-
-
 class (SameLength a ab) => Outer a b ab
 instance Outer '[] b '[]
 instance (SameLength aas ccs,
@@ -392,6 +302,7 @@ instance (SameLength aas ccs,
           Outer as b cs) 
   => Outer aas b ccs
 
+-- * DimMatFromTuple
 class DimMatFromTuple ijs r1 r c e
 
 
@@ -690,16 +601,16 @@ equal (DVec a) (DVec b) = H.equal a b
 -}
 class CMap f a b e e' where
     cmap :: f -> D a e -> D b e'
-    {-
-instance 
+
+-- | Maybe there's a way to implement in terms of the real cmap (possibly
+-- unsafeCoerce?)
+instance
     (ToHLists sh e xs,
-     FromHLists sh' e' xs',
-     SameLengths [xs,xs'],
+     FromHLists xs' sh' e',
+     SameLength xs xs',
      HMapAux (HMap f) xs xs') =>
     CMap f sh sh' e e' where
   cmap f m = fromHLists (HMap f `hMap` (toHLists m :: HList xs) :: HList xs')
-    -- maybe there's a way to implement in terms of the real cmap
-    -- -}
 
 type family AppendEq' (a :: [k]) (b :: [k]) (ab :: [k]) :: Constraint
 type instance AppendEq' (a ': as) b (a' ': abs) = (a ~ a', AppendEq' as b abs)
@@ -966,9 +877,7 @@ instance
 
 
 
-{-
-
-
+{- still bad
 
 
 class PairsToList a t where
@@ -1103,12 +1012,6 @@ type family MapConst (a :: k) (xs :: [l]) :: [k]
 type instance MapConst a (x ': xs) = a ': MapConst a xs
 type instance MapConst a '[] = '[]
 
--- | @map fst@
-{-
-type family MapFst (a :: *) :: [*]
-type instance MapFst ((a,_t) , as) = a ': MapFst as
-type instance MapFst () = '[]
--}
 
 -- | convert from (a,(b,(c,(d,())))) to '[a,b,c,d]
 type family FromPairs (a :: *) :: [*]
@@ -1116,6 +1019,11 @@ type instance FromPairs (a,b) = a ': FromPairs b
 type instance FromPairs () = '[]
 
 {-
+-- | @map fst@
+type family MapFst (a :: *) :: [*]
+type instance MapFst ((a,_t) , as) = a ': MapFst as
+type instance MapFst () = '[]
+
 -- | @\\a xs -> map (/a) xs@
 type family MapDiv (a :: k) (xs :: [k]) :: [k]
 type instance MapDiv a (x ': xs) = (x @- a) ': MapDiv a xs

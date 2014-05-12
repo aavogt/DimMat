@@ -33,7 +33,11 @@ These packages provide operations where the typechecker will prevent invalid ope
 * http://hackage.haskell.org/package/vector-static
 * http://hackage.haskell.org/package/linear
 * http://hackage.haskell.org/package/Vec
+<<<<<<< HEAD
 * http://hackage.haskell.org/package/hmatrix-static
+=======
+* http://ofb.net/~frederik/vectro/
+>>>>>>> master
 * [vector-space](http://hackage.haskell.org/package/vector-space) has limited operations on tuples (up to 4 elements)
 * [tensor](http://hackage.haskell.org/package/tensor) has the number of indices at type level, but the range over which index varies is checked at runtime some of the time
 * [storable-static-array](http://github.com/chowells79/storable-static-array) uses ghc-7.8 features
