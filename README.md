@@ -35,7 +35,14 @@ These packages provide operations where the typechecker will prevent invalid ope
 * http://hackage.haskell.org/package/Vec
 * http://hackage.haskell.org/package/hmatrix-static
 * [vector-space](http://hackage.haskell.org/package/vector-space) has limited operations on tuples (up to 4 elements)
-* [tensor](http://hackage.haskell.org/package/tensor) has the number of indices at type level, but the range over which index varies is checked at runtime
+* [tensor](http://hackage.haskell.org/package/tensor) has the number of indices at type level, but the range over which index varies is checked at runtime some of the time
+* [storable-static-array](http://github.com/chowells79/storable-static-array) uses ghc-7.8 features
+
+### units
+* https://github.com/haasn/units
+* http://hackage.haskell.org/package/units
+* http://hackage.haskell.org/package/dimensional
+* http://hackage.haskell.org/package/dimensional-tf
 
 ### the record connection
 [extensible records](http://www.haskell.org/haskellwiki/Extensible_record) have many needs in common with DimMat. Types in HMatrix like `fromBlocks :: [[Matrix t]] -> Matrix t` are (or will be) generalized to use [HList](http://hackage.haskell.org/package/HList) instead of ordinary lists (`[]`).

@@ -15,8 +15,8 @@ cabal-version:       >=1.10
 tested-with:         GHC==7.8
 
 library
-  exposed-modules:     DimMat,
-                       DimMat.QQ,
+  exposed-modules:     DimMat
+                       DimMat.QQ
                        DimMat.Internal
 
   default-language:    Haskell2010
@@ -25,6 +25,7 @@ library
   default-extensions:   
                         AllowAmbiguousTypes
                         ConstraintKinds
+                        CPP
                         DataKinds
                         FlexibleContexts
                         FlexibleInstances
@@ -43,12 +44,21 @@ library
                         UndecidableInstances
 
   build-depends:       base >=4.7 && <4.9,
-                       units >= 1.1,
-                       hmatrix-syntax >=0.1 && <0.2,
+                       dimensional >= 0.13,
                        template-haskell >=2.8 && <3,
-                       numtype-tf >=0.1 && <0.2,
-                       -- ad >=3.4 && <3.5,
+                       numtype,
+                       tagged,
                        hmatrix >=0.15 && <0.16,
                        ansi-wl-pprint,
+                       hmatrix-syntax,
                        HList >= 0.3
   default-language:    Haskell2010
+
+
+  if flag(with_ad)
+    build-depends:     ad >=4 && <5
+    cpp-options:       -DWITH_AD
+
+flag with_ad
+  default: False
+  description: enable automatic differentiation

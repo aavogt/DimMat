@@ -19,39 +19,36 @@
 module T1 where
 import GHC.Exts (Constraint)
 import DimMat
--- import Numeric.Units.Dimensional.TF.Prelude
--- import Numeric.Units.Dimensional.TF
-import Data.Dimensions.SI
-import Data.Dimensions.Show
-import Data.Dimensions
-import Data.Dimensions.Unsafe
-import Text.PrettyPrint.ANSI.Leijen
+import Numeric.Units.Dimensional.Prelude
+import Numeric.Units.Dimensional
+
+import Text.PrettyPrint.ANSI.Leijen hiding (dot)
 
 import GHC.TypeLits
 
 import qualified Numeric.LinearAlgebra as H
+import qualified Prelude as P
 
 {- Example from http://ctms.engin.umich.edu/CTMS/index.php?example=InvertedPendulum&section=ControlStateSpace -}
 
 -- not really stated on that page, but if you go back a couple of pages in their derivation
 -- you can see that the type of u is a 1x1 matrix whose sole element is a force
 
-massOfCart = (0.5 :: Double) % kilo Gram
-massOfPendulum = (0.2 :: Double) % kilo Gram
-coefficientOfFrictionForCart = (0.1 :: Double) % (Newton :/ Meter :/ Second)
-lengthToPendulumCenterOfMass = (0.3 :: Double) % Meter
-massMomentOfInertiaOfPendulum = (0.006 :: Double) % (kilo Gram :* Meter:* Meter)
-g = (9.8 :: Double) % (Meter :/ Second :^ pTwo)
+massOfCart = (0.5 :: Double) *~ kilo gram
+massOfPendulum = 0.2 *~ kilo gram
+coefficientOfFrictionForCart = 0.1 *~ (newton / meter / second)
+lengthToPendulumCenterOfMass = 0.3 *~ meter
+massMomentOfInertiaOfPendulum = 0.006 *~ (kilo gram * meter * meter)
+g = (9.8::Double) *~ (meter / second ^ pos2)
 
-p = massMomentOfInertiaOfPendulum .* (massOfCart .+ massOfPendulum)
-  .+ (massOfCart.*massOfPendulum.*lengthToPendulumCenterOfMass.*lengthToPendulumCenterOfMass)
+p = massMomentOfInertiaOfPendulum * (massOfCart + massOfPendulum)
+  + (massOfCart*massOfPendulum*lengthToPendulumCenterOfMass*lengthToPendulumCenterOfMass)
 
-neg x = (zero `asTypeOf` x) .- x
-a22 = neg (massMomentOfInertiaOfPendulum .+ massOfPendulum .* lengthToPendulumCenterOfMass .* lengthToPendulumCenterOfMass)
-                  .* coefficientOfFrictionForCart ./ p
-a23 = (massOfPendulum .* massOfPendulum .* g .* lengthToPendulumCenterOfMass .* lengthToPendulumCenterOfMass) ./ p
-a42 = neg (massOfPendulum .* lengthToPendulumCenterOfMass .* coefficientOfFrictionForCart) ./ p
-a43 = massOfPendulum .* g .* lengthToPendulumCenterOfMass.*(massOfCart .+ massOfPendulum)./p
+a22 = negate (massMomentOfInertiaOfPendulum + massOfPendulum * lengthToPendulumCenterOfMass * lengthToPendulumCenterOfMass)
+                  * coefficientOfFrictionForCart / p
+a23 = (massOfPendulum * massOfPendulum * g * lengthToPendulumCenterOfMass * lengthToPendulumCenterOfMass) / p
+a42 = negate (massOfPendulum * lengthToPendulumCenterOfMass * coefficientOfFrictionForCart) / p
+a43 = massOfPendulum * g * lengthToPendulumCenterOfMass*(massOfCart + massOfPendulum)/p
 
 {-
 
@@ -69,18 +66,26 @@ m^-1 s 5.014435047745458e-19 0.9999999999999999
 aSmall = [matD| a22, a23; a42, a43 |]
 
 
-aInvSmall = scale (unity ./ det aSmall)
-    [matD| a43, neg a23; neg a42, a22 |]
+aInvSmall = scale (_1 / det aSmall)
+    [matD| a43, negate a23; negate a42, a22 |]
+
+id2 = Proxy :: Proxy (0 * a)
+
+colMat :: D '(a, '[ra, '[]]) e -> D '(a, '[ra, '[]]) e
+colMat x = x
 
 {-
-id2 = proxy :: Proxy (0 * a)
-
 charEq lam1 lam2 x1 x2 =
         (det ( aSmall `sub` [matD| lam1, _0; _0, lam2 |]),
-         scale lam1 x1 `sub` multiply aSmall x1 `asTypeOf` (undefined :: DimMat [[s,t],'[ '[] ]] Double),
-         scale lam2 x2 `sub` multiply aSmall x2 `asTypeOf` (undefined :: DimMat [[s,t],'[ '[] ]] Double),
-         hconcat x1 x2 `asTypeOf` (undefined :: DimMat [[t,v],[ '[] ,u]] Double))
+         colMat $ scale lam1 x1 `sub` dot aSmall x1,
+         colMat $ scale lam2 x2 `sub` dot aSmall x2,
+         hconcat x1 x2)
+         --
+         -- scale lam1 x1 `sub` dot aSmall x1, -- `asTypeOf` (undefined :: D '(s, ['[t],'[ ]]) Double),
+         -- scale lam2 x2 `sub` dot aSmall x2) --  `asTypeOf` (undefined :: D '(s, ['[t],'[ ]]) Double),
+         -- hconcat x1 x2 `asTypeOf` (undefined :: D '(t, ['[v],'[u]]) Double))
 -- still has ambiguity. Do the SVD instead?
+-}
 
 {-
 >>> cmap (Scale' ((2::Double) *~ second)) aSmall
@@ -96,7 +101,7 @@ newtype Scale' f a = Scale' (Quantity f a)
 instance (Num a, a ~ Double,
           x ~ Quantity d a,
           y ~ Quantity d' a,
-          MultEq f d d')
+          DimMat.Mul f d d')
         => ApplyAB (Scale' f a) x y where
   applyAB (Scale' n) x = n * x
 
@@ -121,11 +126,11 @@ y = [matD| 1 *~ meter; _0 :: Dimensionless Double  |]
 -- :t isLTI (1 *~ second) x u y, given that x u and y have monomorphic
 -- types properly infers constraints on the a,b,c,d arguments!
 isLTI time x u y a b c d =
-    (scale (_1 /time) x `add` multiply a x `add` multiply b u,
-     y `add` multiply c x `add` multiply d u)
+    (scale (_1 /time) (colMat x) `add` dot a x `add` dot b (colMat u),
+     colMat $ y `add` dot c x `add` dot d u)
 
 testIsLTI =
-  (\ a b c d -> case isLTI (1 *~ second) x u y a b c d of
+  (\ a b c d -> case isLTI (1 *~ second) x u y a (colMat b) c (colMat d) of
    _ -> do
     print $ vsep
         [text "A = " </> indent 0 (pretty (zeroes `asTypeOf` a)),
@@ -134,6 +139,7 @@ testIsLTI =
          text "D = " </> indent 0 (pretty (zeroes `asTypeOf` d))]
     ) undefined undefined undefined undefined
 
+{-
 
 {- | data type encoding units required by
 http://en.wikibooks.org/wiki/Control_Systems/State-Space_Equations#State-Space_Equations
@@ -209,3 +215,4 @@ evaluate (a,b,c,d) x u = case (a `multiply` x) `add` (b `multiply` u) of
     xDot -> case (c `multiply` x) `add` (d `multiply` u) of
      y -> (xDot, y)
      -}
+

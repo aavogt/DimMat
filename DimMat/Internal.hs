@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# OPTIONS_GHC -fno-warn-dodgy-exports #-}
 {- | an incomplete extension of dimensional-tf to work with hmatrix and ad
 Haddocks are organized to follow hmatrix
 
@@ -21,7 +21,6 @@ TODO:
 *  missing operations (check export list comments)
 -}
 module DimMat.Internal (
-   asDimTypeOf,
    -- * Data.Packed.Vector
    (@>),
    -- * Data.Packed.Matrix
@@ -53,15 +52,15 @@ module DimMat.Internal (
    diag,
    ctrans,
    -- ** Container class
-   scalarMat,
+   scalar,
    conj,
    scale, scaleRecip,
    recipMat,
    addConstant,
    add,
    sub,
-   mul,
-   divide,
+   mulMat, mulMat,
+   divideMat, divideVec,
    equal,
    arctan2,
    hconcat,
@@ -73,8 +72,8 @@ module DimMat.Internal (
    -- sumElements, prodElements, step, cond, find, assoc, accum,
    -- Convert
    -- ** Product class
-   multiply,
-   -- dot, absSum, norm1, norm2, normInf,
+   DimMat.Internal.dot,
+   -- absSum, norm1, norm2, normInf,
    -- norm1, normInf,
    pnorm,
    -- optimiseMult, mXm, mXv, vXm, (<.>),
@@ -101,10 +100,10 @@ module DimMat.Internal (
    -- *** Singular value decomposition
    -- *** Eigensystems
    -- $eigs
+   {-
    wrapEig, wrapEigOnly,
    EigV, EigE,
    -- **** eigenvalues and eigenvectors
-   {-
    eig,
    eigC,
    eigH,
@@ -142,57 +141,23 @@ module DimMat.Internal (
 
    -- * Automatic Differentiation
    -- $ad
-   -- diff,
-
+#ifdef WITH_Ad
+   diff,
+#endif
    -- * actually internal
-   AddDimensional,
-   AddQty,
-   AllEq,
-   Append,
-   AppendEq,
-   AppendEq',
-   AppendShOf,
-   AreRecips,
-   AreRecipsList,
-   AtEq,
-   CanAddConst,
-   DiagBlock,
-   DimMat(..),
-   DimMatFromTuple,
-   DropPrefix,
-   Head,
-   Inner,
-   MapConst,
-   MapDiv,
-   MapMapConst,
-   MapMul,
-   MapMultEq,
-   MapMultEq',
-   MapRecip,
-   MultEq,
-   MultiplyCxt,
-   PairsToList,
-   PPUnits,
-   PPUnits',
-   Product,
-   SameLengths,
-   Tail,
-   toDM,
-   Trans,
-   UnDimMat,
-   ZipWithMul,
-   ZipWithZipWithMul,
+   module DimMat.Internal,
   ) where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
 import Prelude
 
-import Data.Dimensions
-import Data.Dimensions.Unsafe
-import Data.Dimensions.Poly
-import Data.Dimensions.Show
 
-import Data.Dimensions.DimSpec
+import Data.Type.Equality (type (==))
+import qualified Prelude as P
+import Prelude (Double)
+import Numeric.Units.Dimensional hiding (Mul, Div)
+import Numeric.Units.Dimensional.Prelude hiding (Mul, Div)
+import qualified Numeric.Units.Dimensional as D
 
 import qualified Numeric.LinearAlgebra as H
 import qualified Numeric.LinearAlgebra.LAPACK as H
@@ -202,13 +167,33 @@ import Data.List (transpose)
 
 import Data.HList.CommonMain hiding (MapFst)
 
-asDimTypeOf :: (d1 @~ d2) => Dim n d1 -> Dim m d2 -> Dim n d1
-asDimTypeOf a b = a
 
+-- | a version of Numeric.Units.Dimensional.'D.Mul' which
+-- requires the arguments to include the 'D.Dim' type constructor
+class (D.Mul a b c) => Mul a b c
+
+instance (D.Mul a b c,
+       a ~ Dim l m t i th n j,
+       b ~ Dim l' m' t' i' th' n' j',
+       c ~ Dim l'' m'' t'' i'' th'' n'' j'') =>
+       Mul a b c
+
+-- | a version of Numeric.Units.Dimensional.'D.Div' which
+-- requires the arguments to include the 'D.Dim' type constructor
+class (D.Div a b c) => Div a b c
+
+instance (D.Div a b c,
+       a ~ Dim l m t i th n j,
+       b ~ Dim l' m' t' i' th' n' j',
+       c ~ Dim l'' m'' t'' i'' th'' n'' j'') =>
+       Div a b c
+
+#ifdef WITH_AD
 {- |
 >>> let ke velocity = velocity*velocity*(1*~kilo gram)
 >>> diff ke (3 *~ (metre/second))
 6.0 m^-1 kg^-1 s
+-}
 
 diff :: (Num a) =>
         (forall s. AD.Mode s => Dimensional v x (AD.AD s a)
@@ -216,7 +201,7 @@ diff :: (Num a) =>
         -> Dimensional v x a -> Dimensional v (Div x y) a
 diff f z = Dimensional $ AD.diff (unD . f . Dimensional) (unD z)
     where unD (Dimensional a) = a
--}
+#endif
 
 
 {- $ad
@@ -245,29 +230,28 @@ I got around this problem by copying data. Perhaps that is the solution?
 -}
 
 
-{- | Matrix with statically checked units (and dimensions). This wraps up
-HMatrix. The `sh` type parameter here contains @[row,column]@ units.
-The outer product of @row@ and @column@ lists gives a matrix of units of
-the same size as the data contained within.
-
-some pain happens to ensure that sh always follows the convention
-that the first element of the column units is 'DOne'. One remaining
-potential error is that you can have @ri ~ '[]@, which would make for
-a 0-row matrix.
+{- | Generalization of 'Dimensional' to matrices and vectors. Units
+in each coordinate are known at compile-time. This wraps up HMatrix.
 -}
-data DimMat (sh :: [[ [DimSpec *] ]]) a where
-     DimMat :: (H.Container H.Matrix a, H.Field a)
-        => H.Matrix a -> DimMat [r, '[] ': c] a
-     DimVec :: (H.Container H.Vector a, H.Field a)
-        => H.Vector a -> DimMat '[sh] a
+data D (sh :: ( *, [[ * ]])) e where
+  DMat :: (H.Container H.Matrix e, H.Field e)
+    => H.Matrix e -> D '(r1,[r, c]) e
+      -- ^ the units at coordinate i,j are
+      -- @(r1 ': r)_i (DOne ': c)_j@
+  DVec :: (H.Container H.Vector e, H.Field e)
+    => H.Vector e -> D '(r1, '[r]) e
+      -- ^ the units at coordinate i are
+      -- @(r1 ': r)_i@
+  DScal :: (H.Field e) => e -> D '(r1,'[]) e
+      -- ^ the same as Dimensional
 
 -- very crude
-instance (Show a, PPUnits sh) => Pretty (DimMat sh a) where
-    pretty (DimVec v) = case ppUnits (Proxy :: Proxy sh) of
+instance (Show a, PPUnits sh) => Pretty (D sh a) where
+    pretty (DVec v) = case ppUnits (Proxy :: Proxy sh) of
         [rs] -> vcat
              [ dullgreen (string label) <+> string (show e)
                 | (e,label) <- H.toList v `zip` pad rs ]
-    pretty (DimMat m) = case ppUnits (Proxy :: Proxy sh) of
+    pretty (DMat m) = case ppUnits (Proxy :: Proxy sh) of
         [rs,cs] -> 
             vcat $
             map (hsep . onHead dullgreen) $
@@ -280,7 +264,7 @@ instance (Show a, PPUnits sh) => Pretty (DimMat sh a) where
             onHead f (x:xs) = f x : xs
             onHead _ [] = []
 
-instance Pretty (DimMat sh a) => Show (DimMat sh a) where
+instance Pretty (D sh a) => Show (D sh a) where
     showsPrec p x = showsPrec p (pretty x)
 
 pad :: [String] -> [String]
@@ -290,55 +274,106 @@ pad xs = let
     in map (\x -> take w $ x ++ replicate w ' ') xs
 
 
-class PPUnits (sh :: [[ [DimSpec *] ]]) where
+class PPUnits (sh :: k) where
     ppUnits :: Proxy sh -> [[String]]
+
+instance forall (r1 :: *) (r::[*]) (c :: [*]) l m t i th n j.
+      (PPUnits [r1 ': r, c], Show (Quantity r1 Int), PPUnits' c, PPUnits' r,
+       r1 ~ Dim l m t i th n j) => PPUnits '(r1, [r,c]) where
+    ppUnits _ = ppUnits (Proxy :: Proxy [r1 ': r, DOne ': c])
+
 instance (PPUnits' x, PPUnits xs) => PPUnits (x ': xs) where
     ppUnits _ = ppUnits' (Proxy :: Proxy x) : ppUnits (Proxy :: Proxy xs)
 instance PPUnits '[] where
     ppUnits _ = []
 
-class PPUnits' (sh :: [ [DimSpec *] ]) where
+class PPUnits' (sh :: [ * ]) where
     ppUnits' :: Proxy sh -> [String]
-instance (PPUnits' xs) => PPUnits' ('[] ': xs) where
+instance (PPUnits' xs) => PPUnits' (DOne ': xs) where
     ppUnits' _ = "1" : ppUnits' (Proxy :: Proxy xs)
 instance (ShowDimSpec x, PPUnits' xs) => PPUnits' (x ': xs) where
     ppUnits' _ = showDimSpec (Proxy :: Proxy x) : ppUnits' (Proxy :: Proxy xs)
 instance PPUnits' '[] where
     ppUnits' _ = []
 
--- | @\\a xs -> map (map (const a)) xs@
-type family MapMapConst (a::k) (xs :: [[l]]) :: [[k]]
-type instance MapMapConst a (x ': xs) = MapConst a x ': MapMapConst a xs
-type instance MapMapConst a '[] = '[]
+class ShowDimSpec a where
+    showDimSpec :: Proxy a -> String
 
--- | @\\a xs -> map (const a) xs@
-type family MapConst (a :: k) (xs :: [l]) :: [k]
-type instance MapConst a (x ': xs) = a ': MapConst a xs
-type instance MapConst a '[] = '[]
+instance (Show (Quantity a Int), Dim l m t i th n j ~ a) => ShowDimSpec a where
+    showDimSpec _ = case drop 2 $ show (1 *~ (Dimensional 1 :: Unit a Int)) of
+          "" -> "1"
+          x -> x
 
--- | @\\a xs -> map (/a) xs@
-type family MapDiv (a :: k) (xs :: [k]) :: [k]
-type instance MapDiv a (x ': xs) = (x @- a) ': MapDiv a xs
-type instance MapDiv a '[] = '[]
 
--- | @map fst@
-type family MapFst (a :: *) :: [*]
-type instance MapFst ((a,_t) , as) = a ': MapFst as
-type instance MapFst () = '[]
+-- | @a*b = c@ when any are lists
+class MultEq (a :: k1) (b :: k2) (c :: k3)
 
--- | convert from (a,(b,(c,(d,())))) to '[a,b,c,d]
-type family FromPairs (a :: *) :: [*]
-type instance FromPairs (a,b) = a ': FromPairs b
-type instance FromPairs () = '[]
+-- instance (Zip3 MultEq aas bbs ccs) => MultEq aas bbs ccs
+instance Zip3 Mul as bs cs => MultEq as bs cs
+instance Zip1 Mul as b  c  => MultEq as b  c
+instance Zip1 Mul bs a  c  => MultEq a  bs c
+instance (Zip1 Mul cs aInv b,
+          Mul a aInv DOne) => MultEq a  b  cs
 
-type family UnDQuantity (a :: [*]) :: [ [DimSpec *] ]
-type instance UnDQuantity (x ': xs) = UnDQuantity1 x ': UnDQuantity xs
-type instance UnDQuantity '[] = '[]
+instance (SameLength as bs,
+        Zip2 Mul as bs c)  => MultEq as bs c
+instance (SameLength as cs,
+          Zip2 Div as cs bInv,
+          Mul b bInv DOne) => MultEq as b  cs
+instance (Zip2 Div bs cs aInv,
+          SameLength bs cs,
+          Mul a aInv DOne) => MultEq a  bs cs
+instance Mul a b c => MultEq a b c
 
-type family UnDQuantity1 (a :: *) :: [DimSpec *] 
-type instance UnDQuantity1 (Dim t x) = x
 
--- at some point the 't' is accessible?
+class (SameLength a b, SameLength b c) =>
+    Zip3
+      (op :: k -> k -> k -> Constraint)
+      (a :: [k])
+      (b :: [k])
+      (c :: [k])
+
+instance (SameLength aas bbs,
+          SameLength ccs bbs,
+          op a b c,
+          (a ': as) ~ aas,
+          (b ': bs) ~ bbs,
+          (c ': cs) ~ ccs,
+          Zip3 op as bs cs) => Zip3 op aas bbs ccs
+instance Zip3 op '[] '[] '[]
+
+
+class (SameLength a b) =>
+    Zip2
+      (op :: k -> k -> k -> Constraint)
+      (a :: [k])
+      (b :: [k])
+      (c ::  k)
+
+instance (SameLength aas bbs,
+      op a b c,
+      (a ': as) ~ aas,
+      (b ': bs) ~ bbs,
+      Zip2 op as bs c) => Zip2 op aas bbs c
+
+instance Zip2 op '[] '[] c
+
+class Zip1
+      (op :: k -> k -> k -> Constraint)
+      (a :: [k])
+      (b ::  k)
+      (c ::  k)
+
+instance ((a ': as) ~ aas,
+    op a b c,
+    Zip1 op as b c) => Zip1 op aas b c
+
+instance Zip1 op '[] b c
+
+
+type family HeadOf (x :: k) (xs :: [k]) :: Constraint
+type instance HeadOf x (x' ': u1) = (x ~ x')
+type instance HeadOf x '[] = ("DimMat.HeadOf" ~ "given empty list")
 
 {- | given @ijs :: [[Quantity a]]@ (except the : and [] constructors are
 actually (,) and (), ie. a HList that doesn't use the HList constructors),
@@ -346,64 +381,67 @@ calculate a @DimMat rowUnits colUnits@, where the outer product of rowUnits
 and colUnits gives the units at each index in the ijs.  The first element
 of colUnits is DOne.
 -}
-type family DimMatFromTuple ijs :: * -> *
-type instance DimMatFromTuple ijs =
-        DimMat [UnDQuantity (MapFst ijs),
-               '[] ': MapDiv (UnDQuantity1 (Fst (Fst ijs)))
-               (UnDQuantity (FromPairs (Snd (Fst ijs))))]
 
+
+class (SameLength a ab) => Outer a b ab
+instance Outer '[] b '[]
+instance (SameLength aas ccs,
+          (a ': as) ~ aas,
+          (c ': cs) ~ ccs,
+          MultEq a b c,
+          Outer as b cs) 
+  => Outer aas b ccs
+
+class DimMatFromTuple ijs r1 r c e
+
+
+type family TupleToHListU (a :: *) :: [*]
+type instance TupleToHListU (a, b) = () ': TupleToHListU b
+type instance TupleToHListU () = '[]
+
+type family TuplesToHListU (a :: *) :: [[*]]
+type instance TuplesToHListU (a, b) = TupleToHListU a ': TuplesToHListU b 
+type instance TuplesToHListU () = '[]
+
+instance (Outer (r1 ': r) (DOne ': c) ijs',
+      DMFromTuple1 e ijs ijs',
+      SameLength (TuplesToHListU ijs) ijs') => DimMatFromTuple ijs r1 r c e
+
+-- | helper for 'DimMatFromTuple'
+type family DMFromTuple1 e b (b' :: [[*]]) :: Constraint
+type family DMFromTuple2 e b (b' :: [*]) :: Constraint
+type family DMFromTuple3 e b b' :: Constraint
+
+type instance DMFromTuple3 e (Quantity b e') b' = (e ~ e', b ~ b')
+type instance DMFromTuple1 e (x, xs) (x' ': xs') = (TupleToHListU x `SameLength` x',
+                                                    DMFromTuple2 e x x', DMFromTuple1 e xs xs')
+type instance DMFromTuple1 e () xs = (xs ~ '[])
+type instance DMFromTuple2 e (x, xs) (x' ': xs') = (DMFromTuple3 e x x', DMFromTuple2 e xs xs')
+type instance DMFromTuple2 e () xs = (xs ~ '[])
 
 -- | just for types produced by the matD quasiquote
-toDM :: ijs -> DimMatFromTuple ijs t
-toDM = error "toDM"
+toDM :: DimMatFromTuple ijs r1 r c e => ijs -> Proxy (D '(r1, [r, c]) e)
+toDM _ = Proxy
 
--- | @Inner a b = 'H.dot' a b@
-type family Inner (a :: [k]) (b :: [k]) :: k
-type instance Inner (a ': as) (b ': bs) = a @+ b
-type instance Inner '[] '[] = '[]
 
 -- | @InnerCxt t a b = t ~ 'H.dot' a b@
 type family InnerCxt (t :: k) (a :: [k]) (b :: [k]) :: Constraint
-type instance InnerCxt t (a ': c) (x ': z) = (MultEq a x t, InnerCxt t c z)
+type instance InnerCxt t (a ': as) (b ': bs) = (MultEq a b t, InnerCxt t as bs)
 type instance InnerCxt t '[] '[] = ()
 
--- | MapMul a xs = map (a*) xs
-type family MapMul (a :: k) (xs :: [k]) :: [k]
-type instance MapMul a '[] = '[]
-type instance MapMul a (x ': xs) = (a @+ x) ': MapMul a xs
+class (SameLength a b, InnerCxt c a b) => Inner (a :: [*]) (b :: [*]) (c :: *)
 
--- | MapMulEq a xs ys = map (a*) xs ~ ys
---
--- should work in any direction (given xs and ys, solve a),
--- unlike 'MapMul' that goes forwards only
-type MapMultEq a xs ys = (SameLengths [xs,ys], MapMultEq' a xs ys)
+instance (SameLength aas bbs, InnerCxt c aas bbs) => Inner aas bbs c
 
--- | helper for 'MapMultEq'
-type family MapMultEq' (a :: k) (xs :: [k]) (ys :: [k]) :: Constraint
-type instance MapMultEq' a (x ': xs) (y ': ys) = (MultEq a x y, MapMultEq' a xs ys)
-type instance MapMultEq' a '[] '[] = ()
+-- | @ProdEq a b@ is @product a ~ b@
+class ProdEq a b
+instance (ProdEq as b', Mul a b' b) => ProdEq (a ': as) b
+instance (dOne ~ DOne) => ProdEq '[] dOne
 
--- | xs*ys = zs: knowing two (one that is not zero) will give the third
-type family ZipWithMul (xs :: [k]) (ys :: [k]) (zs :: [k]) :: Constraint
-type instance ZipWithMul (x ': xs) (y ': ys) (z ': zs)
-        = (MultEq x y z, ZipWithMul xs ys zs)
-type instance ZipWithMul '[] '[] '[] = ()
+-- | @RecipEq a aInv@ is @a*aInv ~ DOne@ (or a list of DOne)
+class RecipEq (a :: k) (aInv :: k)
+instance (MultEq as aInvs DOne) => RecipEq as aInvs
 
--- | zipWith (zipWith Mul) xs ys ~ zs
-type family ZipWithZipWithMul (xs :: [[k]]) (ys :: [[k]]) (zs :: [[k]]) :: Constraint
-type instance ZipWithZipWithMul (x ': xs) (y ': ys) (z ': zs)
-    = (ZipWithMul x y z, ZipWithZipWithMul xs ys zs)
-type instance ZipWithZipWithMul '[] '[] '[] = ()
-
--- | 'product'
-type family Product (a :: [k]) :: k
-type instance Product (a ': as) = a @+ Product as
-type instance Product '[] = '[] 
-
--- | @map recip@
-type family MapRecip (a :: [k]) :: [k]
-type instance MapRecip (a ': as) = ('[] @- a) ': MapRecip as
-type instance MapRecip '[] = '[]
 
 -- | @AtEq a n b m c@ calculates @(At a n \`Mult\` At b m) ~ c@,
 -- but also can infer part of the `a` if the `b` and `c` are known
@@ -416,104 +454,69 @@ type family AtEq (a :: [k]) (n :: HNat) (b :: k) :: Constraint
 type instance AtEq (a ': as) HZero b = (a ~ b)
 type instance AtEq (a ': as) (HSucc n) b = AtEq as n b
 
--- | multiplication with information going in any direction (hopefully)
-type MultEq a b c =
-        ( (a @+ b) ~ c, (b @+ a) @~ c,
-          (c @- a) @~ b, (c @- b) @~ a)
-
-type family Head (a :: [k]) :: k
-type instance Head (a ': as) = a
-
-type family Tail (a :: [k]) :: [k]
-type instance Tail (a ': as) = as
-
 -- | Data.Packed.Vector.'H.@>'
-(@>) :: (HNat2Integral i, AtEq units i u)
-    => DimMat '[units] a
+(@>) :: (HNat2Integral i, AtEq r i ri, MultEq r1 ri u)
+    => D '(r1,'[r]) a
     -> Proxy i
-    -> Dim a u
-DimVec v @> i = Dim (v H.@> hNat2Integral i)
+    -> Quantity u a
+DVec v @> i = Dimensional (v H.@> hNat2Integral i)
 
 -- | Data.Packed.Matrix.'H.@@>'
-(@@>) :: (HNat2Integral i, HNat2Integral j, AtEq2 ri i ci j ty)
-    => DimMat [ri,ci] a
+(@@>) :: (HNat2Integral i, HNat2Integral j, AtEq2 (r1 ': r) i (DOne ': c) j ty)
+    => D '(r1, [r,c]) a
     -> (Proxy i, Proxy j)
-    -> Dim a ty
-DimMat m @@> (i,j) = Dim (m H.@@> (hNat2Integral i,hNat2Integral j))
+    -> Quantity ty a
+DMat m @@> (i,j) = Dimensional (m H.@@> (hNat2Integral i,hNat2Integral j))
 
-pnorm :: (sh ~ [r11 ': rs,ci], AllEq r11 rs, AllEq '[] ci)
-         => H.NormType -> DimMat sh a -> Dim (H.RealOf a) r11 
-pnorm normType (DimMat a) = Dim (H.pnorm normType a)
+pnorm :: (AllEq r1 r, AllEq DOne c)
+         => H.NormType -> D '(r1, [r, c]) a -> Quantity r1 (H.RealOf a)
+pnorm normType (DMat a) = Dimensional (H.pnorm normType a)
 
-type family MultiplyCxt (sh1 :: [[ [DimSpec *] ]]) (sh2 :: [ [DimSpec *] ]) (sh3 :: [ [DimSpec *] ]) :: Constraint
-type instance MultiplyCxt [r11 ': r,ci] rj ri' =
-    ( InnerCxt (Inner ci rj) ci rj,
-      MapMultEq (Inner ci rj) (r11 ': r) ri',
-      SameLengths [ci,rj],
-      SameLengths [r11 ': r, ri'])
-
-{- | does H.'H.mXm' and H.'H.mXv'.
-
-vXm and vXv (called dot) might be supported in the future too
+{- | @AllEq a xs@ is like @all (all (a==)) xs@, @all (a ==) xs@, @a == xs@:
+whichever amount of [ ] is peeled off before making the comparison (with ~)
 -}
-multiply :: (H.Product a,
-             sh ~ [ _1 ': __1 ,'[] ': __2 ],
-             MultiplyCxt sh rj ri')
-    => DimMat sh a -> DimMat (rj ': cj) a
-    -> DimMat (ri' ': cj) a
-multiply (DimMat a) (DimMat b) = DimMat (H.multiply a b)
-multiply (DimMat a) (DimVec b) = DimVec (H.mXv a b)
+class AllEq (a :: k1) (xs :: k2)
 
--- | @(Trans sh1 sh2) =>@ asserts that the two matrices are transposes
-type family Trans (sh1 :: [[ [DimSpec *] ]]) (sh2 :: [[ [DimSpec *] ]]) :: Constraint
-type instance Trans [a11 ': ri, one ': ci]
-                    [a11' ': ci', one' ': ri'] =
-    (MapMultEq a11 ri' ri, MapMultEq a11 ci ci',
-     SameLengths [ci, ci'],
-     SameLengths [ri, ri'],
-     one ~ '[], one' ~ '[],
-     a11 ~ a11')
-
-trans :: (Trans sh sh',
-          -- need to assert we have valid shapes
-          -- (and at least one row)
-          sh' ~ [_1 ': __1 , '[] ': _2],
-          sh ~ [_3 ': __3, '[] ': _4])
-    => DimMat sh a -> DimMat sh' a
-trans (DimMat a) = DimMat (H.trans a)
+instance (a ~ x, AllEq a xs) => AllEq a (x ': xs)
+instance AllEq a '[]
+instance AllEq '[] xs
+instance (AllEq a xs, AllEq as xs) => AllEq (a ': as) xs
 
 
-{- | @AreRecips a b@ asserts one of these things, depending on the kind
-involved
 
-> Mul a b ~ DOne
-> zipWith Mul a b ~ [DOne, DOne, DOne, ...]
-> zipWith (zipWith Mul) a b ~ [ [DOne, DOne, ...], [DOne, DOne, ... ] ]
+{- | @c = a `dot` b@ is one of:
+
+> c_ij = sum_j a_ij b_jk
+> c_k  = sum_j a_j  b_jk
+> c_i  = sum_j a_ij b_j
+> c    = sum_j a_j  b_j
 
 -}
-type family AreRecips (a :: k) (b :: k) :: Constraint
-type instance AreRecips (a :: [DimSpec *]) (b :: [DimSpec *]) = (MultEq a b '[])
-type instance AreRecips (a :: [[k]]) (b :: [[k]]) = (SameLength a b, AreRecipsList a b)
+class Dot a b c where
+    dot :: H.Element e => D a e -> D b e -> D c e
 
--- | use AreRecips instead (unless you want to unnecessarily constrain the
--- type. Putting this instance separately is an \"optimization\", since
--- we don't want/need to assert two lists have the 'SameLength' at every
--- recursive call
-type family AreRecipsList (a :: [k]) (b :: [k]) :: Constraint
-type instance AreRecipsList (a ': as) (b ': bs) = (AreRecips a b, AreRecipsList as bs)
-type instance AreRecipsList '[] '[] = ()
-
--- | if any [k] in the list's length is known, then all other [k] lists in the outer list
--- will be forced to have the same length
-type family SameLengths (a :: [[k]]) :: Constraint
-type instance SameLengths (a ': b ': bs) = (SameLength a b, SameLengths (b ': bs))
-type instance SameLengths '[b] = ()
-type instance SameLengths '[] = ()
+instance
+    ( MultEq (a ': ra) b (c ': rc),
+      MultEq ca rb b,
+      shA ~ '(a,[ra, ca]),
+      shB ~ '(b, rb ': cb),
+      shC ~ '(c, rc ': cb))
+    => Dot shA shB shC where
+    dot (DMat a) (DMat b) = DMat (H.multiply a b)
+    dot (DMat a) (DVec b) = DVec (H.mXv a b)
+    {-
+    dot (DVec a) (DMat b) = DVec (H.vXm a b)
+    dot (DVec a) (DVec b) = DScal (H.dot a b)
+    -}
 
 
-inv :: (PInv sh sh', sh' ~ [_1 ': r , '[] ': c], SameLengths [r,c])
-    => DimMat sh a -> DimMat sh' a
-inv (DimMat a) = DimMat (H.inv a)
+class Trans a b where
+    trans :: D a e -> D b e
+
+instance (a ~ '(r1, [x,y]),
+          b ~ '(r1, [y,x]))
+    => Trans a b where
+    trans (DMat a) = DMat (H.trans a)
 
 {- | type for a pseudoinverse (and inverse):
 
@@ -534,29 +537,49 @@ eachother ('AreRecips'), so the constraint on the instance of PInv encodes
 this exactly (plus some constraints requiring that sh and sh' are at least
 1x1)
 -}
-class PInv (sh :: [[ [DimSpec *] ]]) (sh' :: [[ [DimSpec *] ]]) where
-        pinv :: DimMat sh a -> DimMat sh' a
-       
-instance 
-  (sh ~  [_1 ': _2, '[] ': _3],
-   sh' ~ [r1 ': r2, c'], c' ~ ('[] ': _4),
-   AreRecips r1 _1,
-   MultiplyCxt sh (r1 ':r2) c'inv,
-   AreRecips c'inv c') =>
-   PInv sh sh' where
-    pinv (DimMat a) = DimMat (H.pinv a)
+class PInv a b where
+  pinv :: D a e -> D b e
 
-pinvTol :: (PInv sh sh',
+type family LengthSndTwo (a :: k) :: Constraint
+type instance LengthSndTwo '(a, as) = SameLength as '[(), ()]
+
+
+type AreRecips a b = MultEq a b DOne
+instance (MultEq ra cb a,
+          MultEq ca rb b,
+          AreRecips a b,
+          bSh ~ '(b, [rb, cb]),
+          aSh ~ '(a, [ra, ca]))
+    => PInv aSh bSh where
+  pinv (DMat a) = DMat (H.pinv a)
+
+inv :: (PInv a b,
+        b ~ '(t1, [t2, t3]))
+  => D a e -> D b e
+inv (DMat a) = DMat (H.inv a)
+
+       
+
+pinvTol :: (PInv a b,
 #if !MIN_VERSION_hmatrix(0,15,0)
 -- on hmatrix 13, the pinvTol function has type Double -> Matrix Double -> MatrixDouble, later they generalized to Field t => Double -> Matrix t -> Matrix t
             a ~ Double,
 #endif
-           sh' ~ [ri2 ': _1 , '[] ': ci2]) => Double -> DimMat sh a -> DimMat sh' a
-pinvTol tol (DimMat a) = DimMat (H.pinvTol tol a)
+           b ~ '(t1, [t2, t3]) )
+  => Double -> D a e -> D b e
+pinvTol tol (DMat a) = DMat (H.pinvTol tol a)
 
-det :: (SameLengths [ri,ci]) => DimMat [ri,ci] a
-        -> Dim a (Product ri @+ Product ci)
-det (DimMat a) = Dim (H.det a)
+
+class Det a b where
+    det :: D a e -> Quantity b e
+
+instance (SameLength r c,
+       ProdEq (r1 ': r) (pr :: *),
+       ProdEq c (pc :: *),
+       MultEq pr pc b,
+       a ~ '(r1, [r, c])) =>
+    Det a b where
+  det (DMat a) = Dimensional (H.det a)
 
 {- | Numeric.LinearAlgebra.Algorithms.'H.expm'
 
@@ -565,57 +588,108 @@ value of y at time 0
 
 -}
 expm :: (AreRecips r c)
-    => DimMat [ _1 ': r, '[] ': c] a
-    -> DimMat [ _1 ': r, '[] ': c] a
-expm (DimMat a) = DimMat (H.expm a)
+    => D '(r1, [r, c]) a
+    -> D '(r1, [r, c])  a
+expm (DMat a) = DMat (H.expm a)
 
 {- | Numeric.Container.'H.scale'
 
 -}
-scale :: (MapMultEq e ri ri')
-    => Dim a e -> DimMat [ri,ci] a -> DimMat [ri',ci] a
-scale (Dim t) (DimMat a) = DimMat (H.scale t a)
+class Scale a b c where
+  scale :: Quantity a e -> D b e -> D c e
+
+fromQty :: H.Field e => Quantity a e -> D '(a, '[]) e
+fromQty (Dimensional a) = DScal a
+
+toQty :: D '(a, '[]) e -> Quantity a e
+toQty (DScal a) = Dimensional a
+
+instance (MultEq a (r1 ': r) (r1' ': r'),
+      b ~ '(r1, r ': rs),
+      c ~ '(r1', r' ': rs)) =>
+  Scale a b c where
+  scale (Dimensional t) (DMat a) = DMat (H.scale t a)
+  scale (Dimensional t) (DVec a) = DVec (H.scale t a)
 
 {- | Numeric.Container.'H.scaleRecip'
 -}
-scaleRecip :: (MapMultEq e r' r'', AreRecips r r', AreRecips c c',
-                c' ~ ('[] ': _1))
-    => Dim a e -> DimMat [r,c] a -> DimMat [r'',c'] a
-scaleRecip (Dim t) (DimMat a) = DimMat (H.scaleRecip t a)
+class ScaleRecip a b c where
+  scaleRecip :: D '(a, '[]) e -> D b e -> D c e
 
--- | the same as  @scaleRecip (_1 :: Dimensionless t)@
-recipMat :: (AreRecips r r', AreRecips c c', c' ~ ('[] ': _1))
-    => DimMat [r,c] a -> DimMat [r',c'] a
-recipMat (DimMat m) = DimMat (H.scaleRecip 1 m)
+class ScaleRecip1 (bool :: Bool) a b c where
+  scaleRecip1 :: Proxy bool -> D '(a, '[]) e -> D b e -> D c e
 
-liftH2 :: (m ~ DimMat [ri,ci] a,
-          h ~ H.Matrix a) => (h -> h -> h) -> m -> m -> m
-liftH2 f (DimMat a) (DimMat b) = DimMat (f a b)
+instance
+  (ScaleRecipCxt r1 r1' r r' rs rs' a b c
+   , rs' ~ '[ t1 ]
+   ) => ScaleRecip1 True a b c where
+  scaleRecip1 _ (DScal t) (DMat a) = DMat (H.scaleRecip t a)
+
+instance
+  (ScaleRecipCxt r1 r1' r r' rs rs' a b c,
+   rs' ~ '[]) =>
+  ScaleRecip1 False a b c where
+  scaleRecip1 _ (DScal t) (DVec a) = DVec (H.scaleRecip t a)
+
+instance (bool1 ~ (HLength bs == HSucc (HSucc HZero)),
+          bool2 ~ (HLength cs == HSucc (HSucc HZero)),
+          bool1 ~ bool2,
+    ScaleRecip1 bool1 a '(b, bs) '(c, cs)) => ScaleRecip a '(b, bs) '(c, cs) where
+  scaleRecip = scaleRecip1 (Proxy :: Proxy bool1)
+
+
+type ScaleRecipCxt (r1 :: *) (r1' :: *) r r' rs rs' (a :: *) b c =
+  (MultEq a (r1' ': r') (r1 ': r) ,
+   MultEq rs rs' DOne,
+   b ~ '(r1, r ': rs),
+   c ~ '(r1', r' ': rs'))
+
+
+-- | a shortcut for @scaleRecip (DScal 1)@
+recipMat :: forall b c e. (H.Field e, ScaleRecip DOne b c) => D b e -> D c e
+recipMat m = scaleRecip (DScal 1 :: D '(DOne, '[]) e) m
+
+
+liftH2 :: 
+  ( forall h f. (H.Container f e, h ~ f e) => h -> h -> h) ->
+    D a e -> D a e -> D a e
+liftH2 f (DMat a) (DMat b) = DMat (f a b)
+liftH2 f (DVec a) (DVec b) = DVec (f a b)
 
 add a b = liftH2 H.add a b
 sub a b = liftH2 H.sub a b
 
-mul :: (ZipWithZipWithMul sh sh' sh'',
-       sh'' ~ [_1 ': _2, '[] ': _3]) => DimMat sh a -> DimMat sh' a -> DimMat sh'' a
-mul (DimMat a) (DimMat b) = DimMat (H.mul a b)
+mulMat :: ( MultEq as bs cs, MultEq a b c, cs ~ '[t1 , t2] )
+  => D '(a,as) e -> D '(b,bs) e -> D '(c,cs) e
+mulMat (DMat a) (DMat b) = DMat (H.mul a b)
 
-divide :: (ZipWithZipWithMul sh' sh'' sh,
-          sh'' ~ [_1 ': _2,'[] ': _3]) => DimMat sh a -> DimMat sh' a -> DimMat sh'' a
-divide (DimMat a) (DimMat b) = DimMat (H.divide a b)
+mulVec :: ( MultEq as bs cs, MultEq a b c, cs ~ '[t1] )
+  => D '(a,as) e -> D '(b,bs) e -> D '(c,cs) e
+mulVec (DVec a) (DVec b) = DVec (H.mul a b)
 
-arctan2 :: (sh' ~ MapMapConst '[] sh) => DimMat sh a -> DimMat sh a -> DimMat sh' a
-arctan2 (DimMat a) (DimMat b) = DimMat (H.arctan2 a b)
+divideMat :: ( MultEq as cs bs, MultEq a c b, cs ~ '[t1 , t2] )
+  => D '(a,as) e -> D '(b,bs) e -> D '(c,cs) e
+divideMat (DMat a) (DMat b) = DMat (H.divide a b)
 
-equal :: (m ~ DimMat [ri,ci] a) => m -> m -> Bool
-equal (DimMat a) (DimMat b) = H.equal a b
+divideVec :: ( MultEq as cs bs, MultEq a c b, cs ~ '[t1] )
+  => D '(a,as) e -> D '(b,bs) e -> D '(c,cs) e
+divideVec (DVec a) (DVec b) = DVec (H.divide a b)
+
+arctan2 :: (bs ~ MapMapConst DOne as) => D '(a,as) e -> D '(a,as) e -> D '(b,bs) e
+arctan2 (DMat a) (DMat b) = DMat (H.arctan2 a b)
+arctan2 (DVec a) (DVec b) = DVec (H.arctan2 a b)
+
+equal :: D a e -> D a e -> Bool
+equal (DMat a) (DMat b) = H.equal a b
+equal (DVec a) (DVec b) = H.equal a b
 
 {- | @cmap f m@ gives a matrix @m'@
 
 @f@ is applied to 
 
 -}
-class CMap f sh sh' e e' where
-    cmap :: f -> DimMat sh e -> DimMat sh' e'
+class CMap f a b e e' where
+    cmap :: f -> D a e -> D b e'
     {-
 instance 
     (ToHLists sh e xs,
@@ -627,6 +701,27 @@ instance
     -- maybe there's a way to implement in terms of the real cmap
     -- -}
 
+type family AppendEq' (a :: [k]) (b :: [k]) (ab :: [k]) :: Constraint
+type instance AppendEq' (a ': as) b (a' ': abs) = (a ~ a', AppendEq' as b abs)
+type instance AppendEq' '[] b abs = (b ~ abs)
+
+-- | a bit overkill?
+--  @a ++ b = ab@
+type AppendEq a b ab =
+   (ab ~ HAppendR a b,
+    AppendEq' a b ab,
+    SameLength (DropPrefix a ab) b,
+    SameLength (DropPrefix b ab) a)
+
+
+type instance HAppendR (x ': xs) ys = x ': HAppendR xs ys
+type instance HAppendR '[] ys = ys
+
+
+type family DropPrefix (a :: [k]) (ab :: [k]) :: [k]
+type instance DropPrefix (a ': as) (a' ': abs) = DropPrefix as abs
+type instance DropPrefix '[] bs = bs
+
 {- | the slightly involved type here exists because
 ci1 and ci2 both start with DOne, but ci2's contribution
 to ci3 does not need a DOne at the start. Another way to
@@ -637,46 +732,52 @@ read the constraints here is:
 
 The same idea happens with vconcat.
 -}
-hconcat :: (MultEq rem a11 b11,
-            MapMultEq rem ri1 ri2,
-            MapMultEq rem ci2 ci2',
-            AppendEq ci1 ci2' ci3) =>
-    DimMat [a11 ': ri1,ci1] a -> DimMat [b11 ': ri2, ci2] a -> DimMat [a11 ': ri1, ci3] a
-hconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a, b]])
+hconcat ::
+    ( MultEq (rem :: *) a b,
+      MultEq rem ra rb,
+      MultEq rem (DOne ': cb) cb',
+      AppendEq ca cb' cc ) =>
+    D '(a, [ra,ca]) e -> D '(b, [rb, cb]) e -> D '(a, [ra, cc]) e
+hconcat (DMat a) (DMat b) = DMat (H.fromBlocks [[a, b]])
 
-vconcat :: (AppendEq ri1 ri2 ri3) =>
-    DimMat [ri1,ci1] a -> DimMat [ri2,ci1] a -> DimMat [ri3, ci1] a
-vconcat (DimMat a) (DimMat b) = DimMat (H.fromBlocks [[a],[b]])
+vconcat :: (AppendEq ra (b ': rb) rc) =>
+    D '(a, '[ra,ca]) e -> D '(b, '[rb,ca]) e -> D '(a, '[rc,ca]) e
+vconcat (DMat a) (DMat b) = DMat (H.fromBlocks [[a],[b]])
 
-rank, rows, cols :: DimMat t a -> Int 
-rank (DimMat a) = H.rank a
-rows (DimMat a) = H.rows a
-cols (DimMat a) = H.cols a
+rank, rows, cols :: D t a -> Int 
+rank (DMat a) = H.rank a
+rows (DMat a) = H.rows a
+cols (DMat a) = H.cols a
 
 -- | H.'H.rows' except type-level
-rowsNT :: DimMat (ri ': ci) a -> Proxy (HLength ri)
+rowsNT :: D '(a, r ': c) e -> Proxy (HLength (a ': ri))
 rowsNT _ = Proxy
 
 -- | H.'H.cols' except type-level
-colsNT :: DimMat [ri,ci] a -> Proxy (HLength ci)
+colsNT :: D '(a, r ': c ': cs) e -> Proxy (HLength (DOne ': c))
 colsNT _ = Proxy
 
 -- | (m `hasRows` n) constrains the matrix/vector @m@ to have @n@ rows
-hasRows :: (SameLengths [HReplicateR n '[], ri], -- forwards
-            HLength ri ~ n -- backwards
-    ) => DimMat (ri ': _1) a -> Proxy (n :: HNat) -> DimMat (ri ': _1) a
+hasRows :: (SameLength (HReplicateR n ()) r, -- forwards
+            HLength r ~ n -- backwards
+    ) => D '(a, ra ': ca) e -> Proxy (n :: HNat) -> D '(a, ra ': ca) e
 hasRows x _ = x
 
 -- | (m `hasRows` n) constrains the matrix/vector @m@ to have @n@ rows
-hasCols :: (SameLengths [HReplicateR n '[], ci], -- forwards
+hasCols :: (SameLength (HReplicateR n ()) ci, -- forwards
             HLength ci ~ n -- backwards
-    ) => DimMat [ri, ci] a -> Proxy (n :: HNat) -> DimMat [ri,ci] a
+    ) => D '(a, ra ': ca ': rest) e -> Proxy (n :: HNat) -> D '(a, ra ': ca ': rest) e
 hasCols x _ = x
 
--- | H.'H.scalar' renamed to avoid conflicts with Data.Dimensions.'Data.Dimensions.scalar'
-scalarMat :: (H.Field a,
-          sh ~ ['[u], '[ '[]]]) => Dim a u -> DimMat sh a
-scalarMat (Dim a) = DimMat (H.scalar a)
+-- | H.'H.scalar'
+class (MapConst '[] as ~ as) => Scalar as where
+    scalar :: D '(a, '[]) e -> D '(a, as) e
+
+instance Scalar '[ '[] ] where
+  scalar (DScal a) = DVec (H.scalar a)
+
+instance Scalar '[ '[], '[] ] where
+  scalar (DScal a) = DMat (H.scalar a)
 
 {- | Numeric.Container.'H.konst', but the size is determined by the type.
 
@@ -687,61 +788,54 @@ s    1.0 1.0
 s    1.0 1.0
 
 -}
-konst :: forall u us ones a _1.
-    (H.Field a,
-     HNat2Integral (HLength ones),
-     HNat2Integral (HLength us),
-     ones ~ ('[] ': _1),
-     AllEq '[] _1,
-     AllEq u us)
-    => Dim a u -> DimMat [us, ones] a
-konst (Dim a) = DimMat (H.konst a
-    (hNat2Integral (Proxy :: Proxy (HLength us)),
-     hNat2Integral (Proxy :: Proxy (HLength ones))))
+konst :: forall e a ra ca.
+    (H.Field e,
+     HNat2Integral (HLength (a ': ra)),
+     HNat2Integral (HLength (DOne ': ca)),
+     AllEq DOne ca,
+     AllEq a ra)
+    => D '(a, '[]) e -> D '(a, '[ra, ca]) e
+konst (DScal a) = DMat (H.konst a
+    (hNat2Integral (Proxy :: Proxy (HLength (a ': ra))),
+     hNat2Integral (Proxy :: Proxy (HLength (DOne ': ca)))))
+
 
 -- | identity matrix. The size is determined by the type.
-ident :: forall ones a _1.
-    (H.Field a, HNat2Integral (HLength ones), ones ~ ('[] ': _1)) =>
-    DimMat [ones, ones] a
-ident = DimMat (H.ident (hNat2Integral (Proxy :: Proxy (HLength ones))))
+ident :: forall ones e.
+    (H.Field e, HNat2Integral (HLength (DOne ': ones))) =>
+    D '(DOne, [ones, ones]) e
+ident = DMat (H.ident (hNat2Integral (Proxy :: Proxy (HLength (DOne ': ones)))))
 
 -- | zero matrix. The size and dimension is determined by the type.
-zeroes :: forall r c a _1 _2 _3. (H.Field a,
-                              HNat2Integral (HLength r),
-                              HNat2Integral (HLength c),
-                              c ~ ('[] ': _1),
-                              r ~ (_2 ': _3))
-    => DimMat [r, c] a
-zeroes = DimMat (H.konst 0
-        (hNat2Integral (Proxy :: Proxy (HLength r)),
-         hNat2Integral (Proxy :: Proxy (HLength c))))
+zeroes :: forall c a r e. (H.Field e,
+                        HNat2Integral (HLength (a ': r)),
+                        HNat2Integral (HLength (DOne ': c)))
+    => D '(a, '[r, c]) e
+zeroes = DMat (H.konst 0
+        (hNat2Integral (Proxy :: Proxy (HLength (a ': r))),
+         hNat2Integral (Proxy :: Proxy (HLength (DOne ': c)))))
 
 type family CanAddConst (a :: k) (m :: [[k]]) :: Constraint
 type instance CanAddConst a [as, ones] = (AllEq a as, AllEq '[] ones)
 type instance CanAddConst a '[as] = (AllEq a as)
 
-type family AllEq (a :: k) (xs :: [k]) :: Constraint
-type instance AllEq a (x ': xs) = (a ~ x, AllEq a xs)
-type instance AllEq a '[] = ()
+addConstant :: (H.Field e, CanAddConst a sh)
+    => D '(a, '[]) e
+    -> D '(a, sh) e
+    -> D '(a, sh) e
+addConstant (DScal a) (DMat b) = DMat (H.addConstant a b)
+addConstant (DScal a) (DVec b) = DVec (H.addConstant a b)
 
-addConstant :: (H.Field a, CanAddConst u sh)
-    => Dim a u
-    -> DimMat sh a
-    -> DimMat sh a
-addConstant (Dim a) (DimMat b) = DimMat (H.addConstant a b)
-addConstant (Dim  a) (DimVec b) = DimVec (H.addConstant a b)
-
-conj :: DimMat sh a -> DimMat sh a
-conj (DimMat a) = DimMat (H.conj a)
-conj (DimVec a) = DimVec (H.conj a)
+conj :: D sh a -> D sh a
+conj (DMat a) = DMat (H.conj a)
+conj (DVec a) = DVec (H.conj a)
 
 -- | conjugate transpose
 ctrans x = conj . trans $ x
 
-diag :: (MapConst '[] v ~ c,
-        c ~ ('[] ': _1)
-        ) => DimMat '[v] t -> DimMat '[v,c] t
-diag (DimVec a) = DimMat (H.diag a)
+diag :: (MapConst DOne r ~ c, SameLength r c)
+  => D '(a, '[r]) t -> D '(a, '[r,c]) t
+diag (DVec a) = DMat (H.diag a)
 
 #if MIN_VERSION_hmatrix(0,15,0)
 -- | 'H.blockDiag'. The blocks should be provided as:
@@ -749,14 +843,43 @@ diag (DimVec a) = DimMat (H.diag a)
 -- @blockDiag $ 'hBuild' m1 m2 m3@
 --
 -- only available if hmatrix >= 0.15
-diagBlock :: (db ~ DimMat [ri, '[] ': ci] e,
-              HMapOut UnDimMat t (H.Matrix e),
-              Num e, H.Field e, DiagBlock t db)  => HList t -> db
-diagBlock pairs = DimMat (H.diagBlock (hMapOut UnDimMat pairs))
+diagBlock :: (HMapOut UnDimMat (b ': bs) (H.Matrix e),
+              Num e, H.Field e, AppendShOf b bs (D '(a, sh) e),
+              sh ~ '[r,c])
+  => HList (b ': bs)
+  -> D '(a, sh) e
+diagBlock pairs = DMat (H.diagBlock (hMapOut UnDimMat pairs))
 #endif
 
+data UnDimMat = UnDimMat
+instance (D sh a ~ x, H.Matrix a ~ y) => ApplyAB UnDimMat x y where
+        applyAB _ (DMat x) = x
+
+class DiagBlock (bs :: [*]) t
+
+-- | @AppendShOf a [b,c,d] aas@ makes aas have the type of a matrix that
+-- has a,b,c,d along the diagonal
+class AppendShOf a (as :: [*]) aas
+instance 
+ (e ~ f, f ~ g,
+  AppendShOf (D ab e) ds z,
+  AppendDims a b ab,
+     
+  -- constraints to force D in the type
+  x ~ D a e,
+  y ~ D b f,
+  z ~ D c g) =>
+  AppendShOf x (y ': ds) z 
+instance (x ~ z) => AppendShOf x '[] z
+
+type family AppendDims (a :: (*, [[*]])) (b :: (*, [[*]])) (c :: (*, [[*]])) :: Constraint
+type instance AppendDims '(a, [ra,ca]) '(b, [rb,cb]) '(c, [rc,cc])
+  = (c ~ a, AppendEq ra (b ': rb) rc, AppendEq ca cb cc)
+-- how to handle vectors?
+--type instance AppendDims '(a, '[ra]) '(b, '[rb]) = '(a, '[HAppendR ra (b ': rb)])
+
 class ToHList sh e result where
-    toHList :: DimMat sh e -> HList result
+    toHList :: D sh e -> HList result
 
 -- | given a vector like @x = DimMat '[units] e@ this does something like
 -- @[ (x \@> i) | i <- [1 .. n] ]@, if we had comprehensions for HLists
@@ -764,9 +887,9 @@ instance
     (HListFromList e e1,
      SameLength result e1,
      HMapAux AddDimensional e1 result,
-     ToHListRow ri e result) =>
-   ToHList '[ri] e result where
-  toHList (DimVec v) = case hListFromList (H.toList v) :: HList e1 of
+     ToHListRow (r ': rs) e result) =>
+   ToHList '(r, '[rs]) e result where
+  toHList (DVec v) = case hListFromList (H.toList v) :: HList e1 of
       e1 -> hMap AddDimensional e1
 
 class HListFromList e e' where
@@ -776,47 +899,57 @@ instance HListFromList e '[] where
 instance (e ~ e', HListFromList e es) => HListFromList e (e' ': es) where
         hListFromList (e : es) = e `HCons` hListFromList es 
 
-type family ToHListRow (a :: [ [DimSpec *] ]) e (b :: [*]) :: Constraint
-type instance ToHListRow (a ': as) e (b ': bs) = (Dim e a ~ b, ToHListRow as e bs)
+type family ToHListRow (a :: [*]) e (b :: [*]) :: Constraint
+type instance ToHListRow (a ': as) e (b ': bs) = (Quantity a e ~ b, ToHListRow as e bs)
 
+data AddDimensional = AddDimensional
+instance (Quantity t x ~ y) => ApplyAB AddDimensional x y where
+        applyAB _ x = Dimensional x
 
 class FromHList list sh e where
-  fromHList :: HList list -> DimMat sh e
+  fromHList :: HList list -> D sh e
 
 instance 
     (H.Field e,
      HMapOut RmDimensional list e,
-     ToHListRow ri e list) =>
-  FromHList list '[ri] e where
-  fromHList xs = DimVec (H.fromList (hMapOut RmDimensional xs))
+     ToHListRow (r ': rs) e list) =>
+  FromHList list '(r, '[rs]) e where
+  fromHList xs = DVec (H.fromList (hMapOut RmDimensional xs))
 
 data RmDimensional = RmDimensional
-instance (x ~ Dim y d) => ApplyAB RmDimensional x y where
-        applyAB _ (Dim a) = a
+instance (x ~ Quantity d y) => ApplyAB RmDimensional x y where
+        applyAB _ (Dimensional a) = a
 
 
 class FromHLists lists sh e where
-  fromHLists :: HList lists -> DimMat sh e
+  fromHLists :: HList lists -> D sh e
 
 
 -- | [[Dim e unit]] -> DimMat units e
 instance 
-  (ToHListRows' ri ci e lists,
+  (ToHListRows' (r1 ': r) c e lists,
    HMapOut (HMapOutWith RmDimensional) lists [e],
-   (HList listsHead ': _2) ~ lists,
-   ci_ ~ ('[] ': _1), H.Field e,
-   DimSpecProxy2 ri_ ri,
-   DimSpecProxy2 ci_ ci) =>
-  FromHLists lists [ri_,ci_] e where
-    fromHLists xs = DimMat (H.fromLists (hMapOut (HMapOutWith RmDimensional) xs))
-
+   H.Field e) =>
+  FromHLists lists '(r1, [r,c]) e where
+    fromHLists xs = DMat (H.fromLists (hMapOut (HMapOutWith RmDimensional) xs))
 
 newtype HMapOutWith f = HMapOutWith f
 instance (HMapOut f l e, es ~ [e], HList l ~ hl) => ApplyAB (HMapOutWith f) hl es where
     applyAB (HMapOutWith f) = hMapOut f
 
+class ToHListRows' (r :: [*]) (c :: [*]) (e :: *) (rows :: [*])
+instance ToHListRows' '[] c e '[]
+
+instance (ToHListRows' r c e rows,
+          MultEq r c c',
+          HMapCxt (AddQty e) (HList c') hListRow c' row')
+  => ToHListRows' (r1 ': r) c e (hListRow ': rows)
+
+data AddQty u
+instance (qty ~ Quantity u e) => ApplyAB (AddQty u) e qty
+
 class ToHLists sh e xs where
-    toHLists :: DimMat sh e -> HList xs
+    toHLists :: D sh e -> HList xs
 
 -- | DimMat units e -> [[Dim e unit]]
 instance
@@ -824,73 +957,19 @@ instance
      HListFromList (HList e1) e2,
      HMapAux (HMap AddDimensional) e2 xs,
      ToHListRows' ri ci e xs,
-     DimSpecProxy2 ri_ ri,
-     DimSpecProxy2 ci_ ci,
      SameLength e2 xs,
-     ci_ ~ ('[] ': ci__) )
-  => ToHLists [ri_,ci_] e xs where
-  toHLists (DimMat m) = case hListFromList (map hListFromList (H.toLists m) :: [HList e1]) :: HList e2 of
+     (r1 ': r) ~ ri, (DOne ': c) ~ ci )
+  => ToHLists '(r1, [r,c]) e xs where
+  toHLists (DMat m) = case hListFromList (map hListFromList (H.toLists m) :: [HList e1]) :: HList e2 of
     e2 -> hMap (HMap AddDimensional) e2
 
 
-class ToHListRows' (ri :: [ * ]) (ci :: [ * ]) (e :: *) (rows :: [*])
-instance ToHListRows' '[] ci e '[]
 
-instance (ToHListRows' ri ci e rows,
-          MapMultEq r ci ci',
-          HMapCxt (AddQty e) (HList ci') hListRow ci' row')
-  => ToHListRows' (r ': ri) ci e (hListRow ': rows)
 
-type family DimSpecProxy2 (ds :: [[DimSpec *]]) (proxyDs :: [*]) :: Constraint
-type instance DimSpecProxy2 (x ': xs) (p ': ps) = ((Proxy x ~ p) , DimSpecProxy2 xs ps)
-type instance DimSpecProxy2 '[] '[] = ()
+{-
 
-type family DimSpecProxy1 (ds :: [DimSpec *]) (proxyDs :: [*]) :: Constraint
-type instance DimSpecProxy1 (x ': xs) (p ': ps) = ((Proxy x ~ p) , DimSpecProxy1 xs ps)
-type instance DimSpecProxy1 '[] '[] = ()
 
-data AddQty e
-instance (qty ~ Dim d e) => ApplyAB (AddQty e) d qty
 
-data AddDimensional = AddDimensional
-instance (Dim x t ~ y) => ApplyAB AddDimensional x y where
-        applyAB _ x = Dim x
-
-data UnDimMat = UnDimMat
-instance (DimMat sh a ~ x, H.Matrix a ~ y) => ApplyAB UnDimMat x y where
-        applyAB _ (DimMat x) = x
-
-class DiagBlock (bs :: [*]) t
-instance (DiagBlock as as', AppendShOf a as' ~ t) => DiagBlock (a ': as) t 
-instance (a ~ a') => DiagBlock '[a] a'
-
-type family Append (a :: [k]) (b :: [k]) :: [k]
-type instance Append (a ': as) b = a ': Append as b
-type instance Append '[] b = b
-
-type family AppendEq' (a :: [k]) (b :: [k]) (ab :: [k]) :: Constraint
-type instance AppendEq' (a ': as) b (a' ': abs) = (a ~ a', AppendEq' as b abs)
-type instance AppendEq' '[] b abs = (b ~ abs)
-
--- | a bit overkill?
---  @a ++ b = ab@
-type AppendEq a b ab =
-   (ab ~ Append a b,
-    AppendEq' a b ab,
-    SameLengths [DropPrefix a ab, b],
-    SameLengths [DropPrefix b ab, a])
-
-type family DropPrefix (a :: [k]) (ab :: [k2]) :: [k2]
-type instance DropPrefix (a ': as) (a' ': abs) = DropPrefix as abs
-type instance DropPrefix '[] bs = bs
-
--- | rework to follow AppendEq?
-type family AppendDims (sh :: [[k]]) (sh' :: [[k]]) :: [[k]]
-type instance AppendDims [a,b] [c,d] = [Append a c, Append b d]
-type instance AppendDims '[a] '[b] = '[Append a b]
-
-type family AppendShOf (a :: *) (b :: *) :: *
-type instance AppendShOf (DimMat sh t) (DimMat sh' t) = DimMat (AppendDims sh sh') t
 
 class PairsToList a t where
         pairsToList :: a -> [H.Matrix t]
@@ -1012,3 +1091,49 @@ wrapEigOnly :: (EigE [r,c] eigVal, H.Field y)
 wrapEigOnly hmatrixFun (DimMat a) = case hmatrixFun a of
     (e) -> DimVec e
 
+-}
+
+-- | @\\a xs -> map (map (const a)) xs@
+type family MapMapConst (a::k) (xs :: [[l]]) :: [[k]]
+type instance MapMapConst a (x ': xs) = MapConst a x ': MapMapConst a xs
+type instance MapMapConst a '[] = '[]
+
+-- | @\\a xs -> map (const a) xs@
+type family MapConst (a :: k) (xs :: [l]) :: [k]
+type instance MapConst a (x ': xs) = a ': MapConst a xs
+type instance MapConst a '[] = '[]
+
+-- | @map fst@
+{-
+type family MapFst (a :: *) :: [*]
+type instance MapFst ((a,_t) , as) = a ': MapFst as
+type instance MapFst () = '[]
+-}
+
+-- | convert from (a,(b,(c,(d,())))) to '[a,b,c,d]
+type family FromPairs (a :: *) :: [*]
+type instance FromPairs (a,b) = a ': FromPairs b
+type instance FromPairs () = '[]
+
+{-
+-- | @\\a xs -> map (/a) xs@
+type family MapDiv (a :: k) (xs :: [k]) :: [k]
+type instance MapDiv a (x ': xs) = (x @- a) ': MapDiv a xs
+type instance MapDiv a '[] = '[]
+
+type family UnDQuantity (a :: [*]) :: [ [*] ]
+type instance UnDQuantity (x ': xs) = UnDQuantity1 x ': UnDQuantity xs
+type instance UnDQuantity '[] = '[]
+
+type family UnDQuantity1 (a :: *) :: [*] 
+type instance UnDQuantity1 (Unit t x) = x
+
+type family DimMatFromTuple ijs :: * -> *
+type instance DimMatFromTuple ijs =
+        DimMat [UnDQuantity (MapFst ijs),
+               '[] ': MapDiv (UnDQuantity1 (Fst (Fst ijs)))
+               (UnDQuantity (FromPairs (Snd (Fst ijs))))]
+type family Append (a :: [k]) (b :: [k]) :: [k]
+type instance Append (a ': as) b = a ': Append as b
+type instance Append '[] b = b
+-}

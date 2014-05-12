@@ -4,9 +4,8 @@
 -- which constructs a matrix which has dimensions stored.
 module DimMat.QQ (matD) where
 
-import Data.Packed.Syntax.Internal
+-- import Data.Packed.Syntax.Internal
 import Language.Haskell.TH
-import Numeric.NumType.TF (zero, incr)
 
 
 import Language.Haskell.TH as TH
@@ -38,13 +37,17 @@ import Data.Packed.Development(
   atM',
   )
 
-import Data.Dimensions.Unsafe (Dim(Dim))
-import Data.Dimensions (dim)
+import Data.Packed.Syntax.Internal
+import Data.Proxy
 import Language.Haskell.TH.Quote
+
+import Numeric.Units.Dimensional (Dimensional(..))
+
+
 
 matD = QuasiQuoter {
   quoteExp = \s -> case matListExp s of
-    Right (_,_,x) -> buildMatST (map (map return) x)
+    Right (_, _, x) -> buildMatST (map (map return) x)
     Left msg -> fail msg,
   quotePat = \s -> case matListPat s of
     Left msg -> fail msg
@@ -84,19 +87,19 @@ buildMatST es = let r = length es
           (do
             n <- newName "n"
             normalB
-              [| (DimMat $ runSTMatrix $(doE $
+              [| (DMat $ runSTMatrix $(doE $
                     bindS (varP n) [| newUndefinedMatrix RowMajor r c |] :
                     [ noBindS [| unsafeWriteMatrix $(varE n) i j
-                                    ((\(Dim a) -> a) $(varE (vij i j))) |]
+                                    ((\(Dimensional a) -> a) $(varE (vij i j))) |]
                     | i <- [0 .. r-1], j <- [0 .. c-1]] ++
                     [ noBindS [| return $(varE n) |] ])
-                 ) `asTypeOf` toDM $(varE p) |])
+                 ) `asProxyTypeOf` toDM $(varE p) |])
           [] ]
         (foldr
                   (\a b -> [| $b `const` $a |])
-                  [| $(varE m) `asTypeOf` toDM $(varE p) |]
+                  [| $(varE m) `asProxyTypeOf` toDM $(varE p) |]
                   -- a check that lookups actually work
-                  [ [| $(varE (vij i j)) `asDimTypeOf`
+                  [ [| $(varE (vij i j)) `asTypeOf`
                           ($(varE m) @@> ($(mkNat i),$(mkNat j))) |] 
                       | i <- [0 .. r-1],
                         j <- [0 .. c-1] ]
