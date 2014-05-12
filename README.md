@@ -1,12 +1,12 @@
-# compile-time checked units for matrices
-Two related generalizations of `dimensional-tf` (and a branch using a ghc-7.8 only [units](http://hackage.haskell.org/package/units)) are explored in this package:
+# Compile-time checked units for matrices
+Two related generalizations of `dimensional` are explored in this package:
 
-* provide hmatrix operations that know about units too
+* wrap hmatrix operations to check physical units and dimensions at compile time.
 * automatic differentiation (`ad` package) that knows about units
 
 This comes at a cost, since type errors become more complicated, and type signatures
 for functions that operate on the involved quantities are more difficult (see
-`examples/controlspace.hs`). In return, you get a stronger assurance that your
+`examples/controlspace.hs`). In return, you get a stronger assurance that the
 program does the right thing.
 
 Additionally, there is an emphasis on type inference going both ways:
@@ -23,9 +23,10 @@ Haddocks are available at http://aavogt.github.io/haddock/DimMat
 
 
 ## related work
+### units
 * [dimensional-vectors](https://github.com/bjornbm/dimensional-vectors) is smaller, and uses a `[[a]]` representation of the data instead of `Data.Packed.Matrix a`
-* https://github.com/bjornbm/dimensional-experimental/blob/master/Numeric/Units/Dimensional/AD.hs implements 
-* http://www.haskell.org/haskellwiki/Physical_units
+* https://github.com/dmcclean/dimensional-dk-linalg shares some code with DimMat, but 
+* https://github.com/bjornbm/dimensional-experimental/blob/master/Numeric/Units/Dimensional/AD.hs has the same wrapper for AD
 
 ### matrix dimensions statically checked
 These packages provide operations where the typechecker will prevent invalid operations, such as multiplying an m×n matrix with a p×q matrix when n /= p, at compile-time.
@@ -33,20 +34,15 @@ These packages provide operations where the typechecker will prevent invalid ope
 * http://hackage.haskell.org/package/vector-static
 * http://hackage.haskell.org/package/linear
 * http://hackage.haskell.org/package/Vec
-<<<<<<< HEAD
 * http://hackage.haskell.org/package/hmatrix-static
-=======
-* http://ofb.net/~frederik/vectro/
->>>>>>> master
+* [vectro](http://ofb.net/~frederik/vectro/) is a relatively early library
 * [vector-space](http://hackage.haskell.org/package/vector-space) has limited operations on tuples (up to 4 elements)
 * [tensor](http://hackage.haskell.org/package/tensor) has the number of indices at type level, but the range over which index varies is checked at runtime some of the time
 * [storable-static-array](http://github.com/chowells79/storable-static-array) uses ghc-7.8 features
 
 ### units
+* The [haskellwiki physical units](http://www.haskell.org/haskellwiki/Physical_units) mentions several methods to check units at compile time or at run-time
 * https://github.com/haasn/units
-* http://hackage.haskell.org/package/units
-* http://hackage.haskell.org/package/dimensional
-* http://hackage.haskell.org/package/dimensional-tf
 
 ### the record connection
 [extensible records](http://www.haskell.org/haskellwiki/Extensible_record) have many needs in common with DimMat. Types in HMatrix like `fromBlocks :: [[Matrix t]] -> Matrix t` are (or will be) generalized to use [HList](http://hackage.haskell.org/package/HList) instead of ordinary lists (`[]`).
