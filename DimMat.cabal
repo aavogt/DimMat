@@ -23,10 +23,10 @@ library
 
   -- pretty much everything
   default-extensions:   
-                        AllowAmbiguousTypes
                         ConstraintKinds
                         CPP
                         DataKinds
+                        ExplicitNamespaces
                         FlexibleContexts
                         FlexibleInstances
                         GADTs
@@ -42,13 +42,16 @@ library
                         TypeFamilies
                         TypeOperators
                         UndecidableInstances
+                        FunctionalDependencies
 
-  build-depends:       base >=4.7 && <4.9,
+  if (impl(ghc >= 7.7))
+    default-extensions: AllowAmbiguousTypes
+  build-depends:       base >=4.6 && <4.9,
                        dimensional >= 0.13,
                        template-haskell >=2.8 && <3,
                        numtype,
                        tagged,
-                       hmatrix >=0.15 && <0.16,
+                       hmatrix >=0.15 && <0.17,
                        ansi-wl-pprint,
                        hmatrix-syntax,
                        HList >= 0.3

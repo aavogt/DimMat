@@ -1,15 +1,20 @@
-{-# LANGUAGE ViewPatterns, AllowAmbiguousTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE QuasiQuotes #-}
 module T1 where
 import DimMat
+import Numeric.Units.Dimensional.Prelude
+import Numeric.Units.Dimensional
+import qualified Prelude as P
+{-
 import Data.Dimensions.SI
 import Data.Dimensions.Poly
 import Data.Dimensions.Unsafe
+-}
 
 
 -- probably there's a nicer way to write  kg m?
-x00 = 1 *~ (meter * kilo gram)
+x00 = (1 :: Double) *~ (meter * kilo gram)
 x10 = 1 *~ (second * kilo gram)
 x01 = 1 *~ (meter  * second)
 x11 = 1 *~ (second * second)

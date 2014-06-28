@@ -25,7 +25,7 @@ module DimMat.Internal  where
 import Foreign.Storable (Storable)      
 import GHC.Exts (Constraint)
 
-import Data.Type.Equality (type (==))
+-- import Data.Type.Equality (type (==))
 import qualified Prelude as P
 import Prelude (Double)
 import Numeric.Units.Dimensional hiding (Mul, Div)
@@ -63,25 +63,7 @@ instance (D.Div a b c,
        Div a b c
 
 -- * AD
-
-#ifdef WITH_AD
-{- |
->>> let ke velocity = velocity*velocity*(1*~kilo gram)
->>> diff ke (3 *~ (metre/second))
-6.0 m^-1 kg^-1 s
--}
-
-diff :: (Num a) =>
-        (forall s. AD.Mode s => Dimensional v x (AD.AD s a)
-                             -> Dimensional v y (AD.AD s a))
-        -> Dimensional v x a -> Dimensional v (Div x y) a
-diff f z = Dimensional $ AD.diff (unD . f . Dimensional) (unD z)
-    where unD (Dimensional a) = a
-#endif
-
-
 {- $ad
-
 TODO: gradients, hessians, etc.
 
 Types for derivative towers can see hlist's @HList\/Data\/HList\/broken\/Lazy.hs@,
@@ -105,23 +87,42 @@ I got around this problem by copying data. Perhaps that is the solution?
 >     where unQty (Dimensional a) = a
 -}
 
+#ifdef WITH_AD
+{- |
+>>> let ke velocity = velocity*velocity*(1*~kilo gram)
+>>> diff ke (3 *~ (metre/second))
+6.0 m^-1 kg^-1 s
+-}
+
+diff :: (Num a) =>
+        (forall s. AD.Mode s => Dimensional v x (AD.AD s a)
+                             -> Dimensional v y (AD.AD s a))
+        -> Dimensional v x a -> Dimensional v (Div x y) a
+diff f z = Dimensional $ AD.diff (unD . f . Dimensional) (unD z)
+    where unD (Dimensional a) = a
+#endif
+
+
+
+
 
 -- * GADT for linear algebra with units
 
 {- | Generalization of 'Dimensional' to matrices and vectors. Units
 in each coordinate are known at compile-time. This wraps up HMatrix.
+
+[@ 'DMat' @] the units at coordinate ij are @(r1 ': r)_i (DOne ': c)_j@
+
+[@ 'DVec' @] the units at coordinate i are @(r1 ': r)_i@
+
+[@ DScal @] is the same as Dimensional
 -}
 data D (sh :: ( *, [[ * ]])) e where
   DMat :: (H.Container H.Matrix e, H.Field e)
     => H.Matrix e -> D '(r1,[r, c]) e
-      -- ^ the units at coordinate i,j are
-      -- @(r1 ': r)_i (DOne ': c)_j@
   DVec :: (H.Container H.Vector e, H.Field e)
     => H.Vector e -> D '(r1, '[r]) e
-      -- ^ the units at coordinate i are
-      -- @(r1 ': r)_i@
   DScal :: (H.Field e) => e -> D '(r1,'[]) e
-      -- ^ the same as Dimensional
 
 instance (Show a, PPUnits sh) => Pretty (D sh a) where
     pretty (DVec v) = case ppUnits (Proxy :: Proxy sh) of
@@ -403,7 +404,7 @@ instance (AllEq a xs, AllEq as xs) => AllEq (a ': as) xs
 > c    = sum_j a_j  b_j
 
 -}
-class Dot a b c where
+class Dot a b c {- | a b -> c -} where
     dot :: H.Element e => D a e -> D b e -> D c e
 
 instance
@@ -419,6 +420,11 @@ instance
     dot (DVec a) (DMat b) = DVec (H.vXm a b)
     dot (DVec a) (DVec b) = DScal (H.dot a b)
     -}
+
+class DotS s a b
+
+instance (rest' ~ rest, MultEq s (a ': as) (b ': bs))
+    => DotS s '(a, as ': rest) '(b, bs ': rest')
 
 
 class Trans a b where
@@ -542,9 +548,8 @@ instance
   ScaleRecip1 False a b c where
   scaleRecip1 _ (DScal t) (DVec a) = DVec (H.scaleRecip t a)
 
-instance (bool1 ~ (HLength bs == HSucc (HSucc HZero)),
-          bool2 ~ (HLength cs == HSucc (HSucc HZero)),
-          bool1 ~ bool2,
+instance (HEq (HLength bs) (HSucc (HSucc HZero)) bool1,
+          HEq (HLength cs) (HSucc (HSucc HZero)) bool1,
     ScaleRecip1 bool1 a '(b, bs) '(c, cs)) => ScaleRecip a '(b, bs) '(c, cs) where
   scaleRecip = scaleRecip1 (Proxy :: Proxy bool1)
 
@@ -608,7 +613,7 @@ instance
     (ToHLists sh e xs,
      FromHLists xs' sh' e',
      SameLength xs xs',
-     HMapAux (HMap f) xs xs') =>
+     HMapCxt HList (HMap f) xs xs') =>
     CMap f sh sh' e e' where
   cmap f m = fromHLists (HMap f `hMap` (toHLists m :: HList xs) :: HList xs')
 
@@ -783,9 +788,10 @@ instance
   AppendShOf x (y ': ds) z 
 instance (x ~ z) => AppendShOf x '[] z
 
-type family AppendDims (a :: (*, [[*]])) (b :: (*, [[*]])) (c :: (*, [[*]])) :: Constraint
-type instance AppendDims '(a, [ra,ca]) '(b, [rb,cb]) '(c, [rc,cc])
-  = (c ~ a, AppendEq ra (b ': rb) rc, AppendEq ca cb cc)
+class AppendDims (a :: (*, [[*]])) (b :: (*, [[*]])) (c :: (*, [[*]]))
+    | a b -> c, c a -> b, c b -> a
+instance (c ~ a, AppendEq ra (b ': rb) rc, AppendEq ca cb cc) =>
+  AppendDims '(a, [ra,ca]) '(b, [rb,cb]) '(c, [rc,cc])
 -- how to handle vectors?
 --type instance AppendDims '(a, '[ra]) '(b, '[rb]) = '(a, '[HAppendR ra (b ': rb)])
 
@@ -797,16 +803,25 @@ class ToHList sh e result where
 instance 
     (HListFromList e e1,
      SameLength result e1,
-     HMapAux AddDimensional e1 result,
+     HMapCxt HList AddDimensional e1 result,
+     -- HMapAddDimensional result e1,
      ToHListRow (r ': rs) e result) =>
    ToHList '(r, '[rs]) e result where
   toHList (DVec v) = case hListFromList (H.toList v) :: HList e1 of
       e1 -> hMap AddDimensional e1
 
-class HListFromList e e' where
+
+class HMapAddDimensional (a :: [*]) (b :: [*]) | a -> b
+instance HMapAddDimensional '[] '[]
+instance (HMapAddDimensional as bs,
+    dta ~ Quantity t b) => HMapAddDimensional (dta ': as) (b ': bs)
+
+class HListFromList e e' | e' -> e where
         hListFromList :: [e] -> HList e'
-instance HListFromList e '[] where
-        hListFromList _ = HNil
+
+instance HListFromList e '[e] where
+        hListFromList (e : _) = HCons e HNil
+        hListFromList _ = error "HListFromList: not enough input"
 instance (e ~ e', HListFromList e es) => HListFromList e (e' ': es) where
         hListFromList (e : es) = e `HCons` hListFromList es 
 
@@ -853,11 +868,12 @@ instance ToHListRows' '[] c e '[]
 
 instance (ToHListRows' r c e rows,
           MultEq r c c',
-          HMapCxt (AddQty e) (HList c') hListRow c' row')
+          HMapCxt HList (AddQty e) c' row')
   => ToHListRows' (r1 ': r) c e (hListRow ': rows)
 
 data AddQty u
-instance (qty ~ Quantity u e) => ApplyAB (AddQty u) e qty
+instance (qty ~ Quantity u e) => ApplyAB (AddQty u) e qty where
+    applyAB _ = Dimensional
 
 class ToHLists sh e xs where
     toHLists :: D sh e -> HList xs
@@ -866,7 +882,7 @@ class ToHLists sh e xs where
 instance
     (HListFromList e e1,
      HListFromList (HList e1) e2,
-     HMapAux (HMap AddDimensional) e2 xs,
+     HMapCxt HList (HMap AddDimensional) e2 xs,
      ToHListRows' ri ci e xs,
      SameLength e2 xs,
      (r1 ': r) ~ ri, (DOne ': c) ~ ci )

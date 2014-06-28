@@ -14,7 +14,8 @@ in ordinary haskell this is pretty much provided. For example if we have,
 `z = x + y`, then if due to other parts of the program the compiler knows
 `x :: (Int,_1,_2)`, `y :: (_3,Int,_4)` and `z :: (_5,_6,Int)`, it can
 conclude that (`+`) is needed with type `(Int,Int,Int) -> (Int,Int,Int) -> (Int,Int,Int)` [^note].
-This means using things with kind Constraint (class/type/type family) to
+This means using things with kind Constraint (class/type/type family) instead
+of type families.
 
 
 [^note]: which isn't available by default, but you can check http://hackage.haskell.org/package/NumInstances or write it by hand
@@ -51,6 +52,7 @@ These packages provide operations where the typechecker will prevent invalid ope
 ## units
 * The [haskellwiki physical units](http://www.haskell.org/haskellwiki/Physical_units) mentions several methods to check units at compile time or at run-time
 * https://github.com/haasn/units
+* https://github.com/adamgundry/inch/ is a preprocessor for type-level integers with an examples involving units
 
 ## Records
 [extensible records](http://www.haskell.org/haskellwiki/Extensible_record) have many needs in common with DimMat. Types in HMatrix like `fromBlocks :: [[Matrix t]] -> Matrix t` are (or will be) generalized to use [HList](http://hackage.haskell.org/package/HList) instead of ordinary lists (`[]`).

@@ -1,11 +1,9 @@
 -- | see examples/
 module DimMat (
 
-   -- * quasiquotes
+   -- * Quasiquotes
    matD,
    blockD,
-
-   module Data.HList.CommonMain,
  
 
    -- * Data.Packed.Vector
@@ -59,7 +57,7 @@ module DimMat (
    -- sumElements, prodElements, step, cond, find, assoc, accum,
    -- Convert
    -- ** Product class
-   DimMat.Internal.dot,
+   Dot(..), 
    -- absSum, norm1, norm2, normInf,
    -- norm1, normInf,
    pnorm,
@@ -86,7 +84,7 @@ module DimMat (
 
    -- *** Singular value decomposition
    -- *** Eigensystems
-   -- $eigs
+   -- eigs
    {-
    wrapEig, wrapEigOnly,
    EigV, EigE,
@@ -127,20 +125,27 @@ module DimMat (
    -- ** Util 
 
    -- * Automatic Differentiation
-   -- $ad
+   -- ad
 #ifdef WITH_Ad
    diff,
 #endif
 
+
+    -- * todo arrange
+    DotS,
+    MultEq,
+
     -- * to keep types looking ok
+    D,
+    module Data.HList.CommonMain,
     Complex, 
+
+    -- ** "Numeric.NumType"
+    Pos, Neg, Succ, Zero, Neg1,
     ) where
     
+import Numeric.NumType
 import DimMat.Internal
 import DimMat.QQ
-{-
-import Data.Dimensions
-import Data.Dimensions.Unsafe (Dim)
--}
 import Data.HList.CommonMain
 import Data.Complex

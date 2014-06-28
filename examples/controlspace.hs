@@ -1,5 +1,8 @@
-{-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE CPP #-}
+#if __GLASGOW_HASKELL__ > 707
 {-# LANGUAGE AllowAmbiguousTypes #-}
+#endif
+{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -69,7 +72,7 @@ aSmall = [matD| a22, a23; a42, a43 |]
 aInvSmall = scale (_1 / det aSmall)
     [matD| a43, negate a23; negate a42, a22 |]
 
-id2 = Proxy :: Proxy (0 * a)
+-- id2 = Proxy :: Proxy (0 * a)
 
 colMat :: D '(a, '[ra, '[]]) e -> D '(a, '[ra, '[]]) e
 colMat x = x
@@ -101,7 +104,7 @@ newtype Scale' f a = Scale' (Quantity f a)
 instance (Num a, a ~ Double,
           x ~ Quantity d a,
           y ~ Quantity d' a,
-          DimMat.Mul f d d')
+          Mul f d d')
         => ApplyAB (Scale' f a) x y where
   applyAB (Scale' n) x = n * x
 
@@ -139,7 +142,6 @@ testIsLTI =
          text "D = " </> indent 0 (pretty (zeroes `asTypeOf` d))]
     ) undefined undefined undefined undefined
 
-{-
 
 {- | data type encoding units required by
 http://en.wikibooks.org/wiki/Control_Systems/State-Space_Equations#State-Space_Equations
@@ -151,35 +153,37 @@ To refresh:
 
 the units of d/dt are 1/iv 
 -}
-class LiSystem (iv :: *) (xs :: [*]) (ys :: [*]) (us :: [*])
-            (a :: [[*]]) (b :: [[*]]) (c :: [[*]]) (d :: [[*]])
+class LiSystem (iv :: *) (xs :: (*, [[*]])) (ys :: (*, [[*]])) (us :: (*, [[*]]))
+            (a :: (*, [[*]])) (b :: (*, [[*]])) (c :: (*, [[*]])) (d :: (*, [[*]]))
 instance LiSystemCxt dxs iv xs ys us a b c d
     => LiSystem iv xs ys us a b c d
 
 type LiSystemCxt dxs iv xs ys us a b c d =
-   (MultiplyCxt a xs dxs,
-    MultiplyCxt b us dxs,
-    MultiplyCxt c xs ys,
-    MultiplyCxt d us ys,
-    MapMultEq iv dxs xs)
+   (Dot a xs dxs,
+    Dot b us dxs,
+    Dot c xs ys,
+    Dot d us ys,
+    DotS iv dxs xs
+    )
 
 -- | identity function but constrains types
 isLiTuple :: 
     (LiSystem iv xs ys us a b c d,
-    t ~ (DimMat a e, DimMat b e, DimMat c e, DimMat d e)) =>
+    t ~ (D a e, D b e, D c e, D d e)) =>
     t -> t
 isLiTuple x = x
 
 isExample :: 
      (LiSystem DTime
-        [DLength, DVelocity, DPlaneAngle, DAngularVelocity]
-        [DLength, DPlaneAngle]
-        '[DForce]
-        a b c d, t ~ (DimMat a e, DimMat b e, DimMat c e, DimMat d e)) => 
+        '(DLength , '[[DVelocity, DPlaneAngle, DAngularVelocity]])
+        '(DLength, '[ '[DPlaneAngle]])
+        '(DForce, '[ '[] ] )
+        a b c d, t ~ (D a e, D b e, D c e, D d e)) => 
     t -> t
 isExample x = x
 
-pendulum = isExample (a',b',c',d')
+pendulum = case (a',b',c',d') of
+             sys -> isExample sys -- `const` evaluate sys 
          where
            a' = [matD| _0, _1, _0, _0;
                        _0, a22, a23, _0;
@@ -193,11 +197,15 @@ pendulum = isExample (a',b',c',d')
                        _0, _0, _1, _0 |]
            d' = zeroes
 
+{-
 -- poles (a,_,_,_) = eigenvalues a
 
--- causes no problems for AV
-evaluatePendulum = evaluate pendulum
 
+-}
+-- causes no problems for AV
+-- evaluatePendulum = evaluate pendulum
+
+{-
 evaluate ::
     ( -- require all matrices to be at least 1x1
       -- really ought to be part of the MultiplyCxt
@@ -211,12 +219,14 @@ evaluate ::
     -> DimMat [xs, '[ '[] ]] e
     -> DimMat [us, '[ '[] ]] e
     -> (DimMat [dxs, '[ '[] ]] e, DimMat [ys, '[ '[] ]] e)
-evaluate (a,b,c,d) x u = case (a `multiply` x) `add` (b `multiply` u) of
-    xDot -> case (c `multiply` x) `add` (d `multiply` u) of
+    -}
+evaluate (a,b,c,d) x u = case (a `dot` x) `add` (b `dot` u) of
+    xDot -> case (c `dot` x) `add` (d `dot` u) of
      y -> (xDot, y)
-     -}
 
 
+{-
 
 ctrb = let (a,b,_,_) = pendulum
         in [blockD| b, a `multiply` b, a `multiply` a `multiply` b, a `multiply` a `multiply` a `multiply` b |]
+        -}

@@ -1,2 +1,5 @@
 .
 https://github.com/aavogt/hmatrix-syntax
+https://github.com/aavogt/haskell-src-meta
+https://github.com/haskell-suite/haskell-src-exts
+darcs:http://code.haskell.org/~aavogt/HList

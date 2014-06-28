@@ -118,11 +118,11 @@ buildMatST es = let r = length es
                                     ((\(Dimensional a) -> a) $(varE (vij i j))) |]
                     | i <- [0 .. r-1], j <- [0 .. c-1]] ++
                     [ noBindS [| return $(varE n) |] ])
-                 ) `asProxyTypeOf` toDM $(varE p) |])
+                 ) `asProxyTypeOf` $(varE 'toDM) $(varE p) |])
           [] ]
         (foldr
                   (\a b -> [| $b `const` $a |])
-                  [| $(varE m) `asProxyTypeOf` toDM $(varE p) |]
+                  [| $(varE m) `asProxyTypeOf` $(varE 'toDM) $(varE p) |]
                   -- a check that lookups actually work
                   [ [| $(varE (vij i j)) `asTypeOf`
                           ($(varE m) @@> ($(mkNat i),$(mkNat j))) |] 
