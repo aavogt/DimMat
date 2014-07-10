@@ -51,7 +51,7 @@ library
                        template-haskell >=2.8 && <3,
                        numtype,
                        tagged,
-                       hmatrix >=0.15 && <0.17,
+                       hmatrix >=0.16 && <0.17,
                        ansi-wl-pprint,
                        hmatrix-syntax,
                        HList >= 0.3

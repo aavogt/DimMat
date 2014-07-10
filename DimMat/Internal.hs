@@ -478,10 +478,6 @@ inv (DMat a) = DMat (H.inv a)
        
 
 pinvTol :: (PInv a b,
-#if !MIN_VERSION_hmatrix(0,15,0)
--- on hmatrix 13, the pinvTol function has type Double -> Matrix Double -> MatrixDouble, later they generalized to Field t => Double -> Matrix t -> Matrix t
-            a ~ Double,
-#endif
            b ~ '(t1, [t2, t3]) )
   => Double -> D a e -> D b e
 pinvTol tol (DMat a) = DMat (H.pinvTol tol a)
@@ -753,7 +749,6 @@ diag :: (MapConst DOne r ~ c, SameLength r c)
   => D '(a, '[r]) t -> D '(a, '[r,c]) t
 diag (DVec a) = DMat (H.diag a)
 
-#if MIN_VERSION_hmatrix(0,15,0)
 -- | 'H.blockDiag'. The blocks should be provided as:
 --
 -- @blockDiag $ 'hBuild' m1 m2 m3@
@@ -765,7 +760,6 @@ diagBlock :: (HMapOut UnDimMat (b ': bs) (H.Matrix e),
   => HList (b ': bs)
   -> D '(a, sh) e
 diagBlock pairs = DMat (H.diagBlock (hMapOut UnDimMat pairs))
-#endif
 
 data UnDimMat = UnDimMat
 instance (D sh a ~ x, H.Matrix a ~ y) => ApplyAB UnDimMat x y where
